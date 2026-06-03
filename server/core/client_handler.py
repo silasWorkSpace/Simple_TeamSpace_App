@@ -1,0 +1,81 @@
+import json
+import struct
+import socket
+
+class ClientHandler:
+    """Handles individual client connections and protocol framing."""
+    
+    def __init__(self, client_socket, address, server):
+        self.client_socket = client_socket
+        self.address = address
+        self.server = server
+        self.user_id = None
+        self.is_running = True
+
+    def run(self):
+        print(f"[HANDLER] Started for {self.address}")
+        try:
+            while self.is_running:
+                # 1. Read 4-byte length prefix
+                header = self._recv_all(4)
+                if not header:
+                    break
+                
+                length = struct.unpack('>I', header)[0]
+                
+                # 2. Read JSON payload
+                payload_raw = self._recv_all(length)
+                if not payload_raw:
+                    break
+                
+                payload_str = payload_raw.decode('utf-8')
+                packet = json.loads(payload_str)
+                
+                self._handle_packet(packet)
+                
+        except Exception as e:
+            print(f"[LỖI HANDLER] {self.address}: {e}")
+        finally:
+            self._cleanup()
+
+    def _recv_all(self, n):
+        """Helper to receive exactly n bytes."""
+        data = bytearray()
+        while len(data) < n:
+            packet = self.client_socket.recv(n - len(data))
+            if not packet:
+                return None
+            data.extend(packet)
+        return data
+
+    def send_packet(self, packet_type, data, packet_id="system"):
+        """Sends a JSON packet with a 4-byte length prefix."""
+        payload = {
+            "v": "1.0",
+            "id": packet_id,
+            "type": packet_type,
+            "data": data
+        }
+        json_str = json.dumps(payload).encode('utf-8')
+        header = struct.pack('>I', len(json_str))
+        self.client_socket.sendall(header + json_str)
+
+    def _handle_packet(self, packet):
+        """Processes incoming packets based on type."""
+        p_type = packet.get("type")
+        p_id = packet.get("id")
+        p_data = packet.get("data", {})
+
+        print(f"[PACKET] Received {p_type} from {self.address}")
+
+        if p_type == "SYS_PING":
+            self.send_packet("SYS_PONG", {}, p_id)
+        else:
+            # Placeholder for future Milestone logic
+            print(f"[WARNING] Unhandled packet type: {p_type}")
+
+    def _cleanup(self):
+        """Closes the socket and cleans up resources."""
+        self.is_running = False
+        self.client_socket.close()
+        print(f"[KẾT THÚC] Client {self.address} đã ngắt kết nối.")
