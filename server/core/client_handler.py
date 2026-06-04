@@ -1,6 +1,8 @@
 import json
 import struct
 import socket
+from services.auth_service import AuthService
+from storage import database
 
 class ClientHandler:
     """Handles individual client connections and protocol framing."""
@@ -42,10 +44,13 @@ class ClientHandler:
         """Helper to receive exactly n bytes."""
         data = bytearray()
         while len(data) < n:
-            packet = self.client_socket.recv(n - len(data))
-            if not packet:
+            try:
+                packet = self.client_socket.recv(n - len(data))
+                if not packet:
+                    return None
+                data.extend(packet)
+            except socket.error:
                 return None
-            data.extend(packet)
         return data
 
     def send_packet(self, packet_type, data, packet_id="system"):
@@ -70,12 +75,53 @@ class ClientHandler:
 
         if p_type == "SYS_PING":
             self.send_packet("SYS_PONG", {}, p_id)
+        
+        elif p_type == "AUTH_REGISTER":
+            phone = p_data.get("phone")
+            password = p_data.get("password")
+            name = p_data.get("display_name")
+            
+            if not all([phone, password, name]):
+                self.send_packet("SYS_ERROR", {"code": 400, "message": "Missing fields"}, p_id)
+                return
+
+            success, result = AuthService.register(phone, password, name)
+            if success:
+                self.user_id = result["user_id"]
+                self.server.register_session(self.user_id, self)
+                self.send_packet("AUTH_SUCCESS", result, p_id)
+            else:
+                msg = "Phone already exists" if result == 400 else "Server error"
+                self.send_packet("SYS_ERROR", {"code": result, "message": msg}, p_id)
+
+        elif p_type == "AUTH_LOGIN":
+            phone = p_data.get("phone")
+            password = p_data.get("password")
+            
+            if not all([phone, password]):
+                self.send_packet("SYS_ERROR", {"code": 400, "message": "Missing fields"}, p_id)
+                return
+
+            success, result = AuthService.login(phone, password)
+            if success:
+                self.user_id = result["user_id"]
+                self.server.register_session(self.user_id, self)
+                self.send_packet("AUTH_SUCCESS", result, p_id)
+            else:
+                self.send_packet("SYS_ERROR", {"code": result, "message": "Invalid credentials"}, p_id)
+        
         else:
-            # Placeholder for future Milestone logic
             print(f"[WARNING] Unhandled packet type: {p_type}")
 
     def _cleanup(self):
         """Closes the socket and cleans up resources."""
         self.is_running = False
-        self.client_socket.close()
+        if self.user_id:
+            self.server.unregister_session(self.user_id)
+            database.update_online_status(self.user_id, False)
+        
+        try:
+            self.client_socket.close()
+        except:
+            pass
         print(f"[KẾT THÚC] Client {self.address} đã ngắt kết nối.")

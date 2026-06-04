@@ -1,24 +1,29 @@
 # Development Standards
 
 ## Code Style
-- **Python**: Follow PEP 8. Use type hints where appropriate.
-- **Dart**: Follow Official Dart Style Guide (Effective Dart).
+- **Python**: Follow PEP 8. Use type hints.
+- **Dart**: Follow Effective Dart.
 
 ## Networking
-- Always use the defined 4-byte length prefix (Big-Endian).
-- All JSON keys should be snake_case.
-- Packet types must be uppercase (e.g., `AUTH_LOGIN`).
+- **Framing**: Mandatory 4-byte Big-Endian length prefix.
+- **Naming**: JSON keys must be `snake_case`.
+- **Types**: Packet types must be `UPPERCASE`.
+- **Correlation**: Responses must preserve request `id`.
 
 ## Security
-- **NEVER** store plain-text passwords.
-- **NEVER** log sensitive user data or passwords.
-- Use `chcp 65001` before running shell commands to ensure UTF-8 encoding.
+- **Passwords**: Strictly `bcrypt` hashing. No plain-text or reversible encryption.
+- **Logging**: Never log passwords or sensitive PII.
+
+## Database
+- **Safety**: Always use parameterized queries.
+- **Lifecycle**: Open connection, execute, and close immediately.
+- **Integrity**: Enforce foreign keys with `PRAGMA foreign_keys = ON`.
 
 ## Workflow
-- Research existing code before implementing.
-- Use `replace` for surgical edits.
-- Add tests or verification scripts for every new feature.
-- Do not commit changes unless explicitly requested.
+- **Research**: Read-only investigation before planning.
+- **Strategy**: Propose implementation details in `implementation_plan.md`.
+- **Execution**: Small, auditable commits.
+- **Verification**: Mandatory verification script/tests for every milestone.
 
 ## Error Handling Standards
 - **Server**: Use try-except blocks around networking and DB operations. Return structured `SYS_ERROR` packets to the client.

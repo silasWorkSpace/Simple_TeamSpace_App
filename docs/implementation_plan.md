@@ -1,29 +1,23 @@
-# Implementation Plan - Milestone 2
+# Implementation Plan
 
-## Approved Goals
-1. Implement User Registration (`AUTH_REGISTER`).
-2. Implement User Login (`AUTH_LOGIN`).
-3. **Password Security**: 
-   - Use `bcrypt` for secure hashing and verification.
-   - Store only `password_hash` in the database.
-   - **NEVER** store raw passwords or reversible encrypted passwords.
-4. Implement Session Mapping (linking active TCP connections to `user_id`).
-5. Handle `AUTH_SUCCESS` and `SYS_ERROR` responses.
-6. Create Authentication UI (Login and Registration screens).
+## Implemented Architecture Decisions (Milestone 2 Verified)
+- **Database Access**: Implemented `server/storage/database.py` using a lightweight Open-Execute-Close pattern.
+- **Server Business Logic**: Implemented `server/services/auth_service.py` using `bcrypt` for secure hashing.
+- **Client Networking**: Implemented `client/lib/services/auth_service.dart` with request-response correlation.
+- **Client State Management**: Implemented `client/lib/controllers/auth_controller.dart` using `ChangeNotifier`.
 
-## Technical Proposals (Pending Approval)
-*Note: These are suggested implementation details and are not yet approved design decisions.*
+---
 
-- **Server Organization**: 
-  - Centralize database operations in a `server/storage/database.py` helper.
-  - Create an `AuthService` in `server/services/auth_service.py` to handle logic.
-- **Client Organization**:
-  - Implement an `AuthService` in `client/lib/services/auth_service.dart`.
-  - Use a `ChangeNotifier` or similar pattern for managing user session state in the Flutter app.
+## Future Proposals (Pending Approval)
 
-## Implementation Order
-1. **Server-side Logic**: Implement hashing, database lookups/inserts, and packet handlers.
-2. **Server-side Session Tracking**: Update `TCPServer` or `ClientHandler` to maintain the `user_id` context.
-3. **Client-side Service**: Implement packet sending and response parsing for Auth types.
-4. **Client-side UI**: Build the Login and Registration screens and hook them to the service.
-5. **Verification**: End-to-end testing of the registration and login flows.
+### Milestone 3: Chat
+- **Logic**: Implement `ChatService` on the server to route messages between `active_sessions`.
+- **Persistence**: Finalize `messages` table schema and implement CRUD operations.
+- **Client**: Create `ChatController` and `ChatTab` UI.
+
+### Milestone 4: Kanban
+- **Logic**: Implement `TaskService`.
+- **Persistence**: Finalize `tasks` table schema.
+
+### Milestone 5: File Storage + Voice
+- **Logic**: Implement binary chunking for files and signaling for calls.

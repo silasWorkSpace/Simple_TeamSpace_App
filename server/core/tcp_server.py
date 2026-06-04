@@ -12,8 +12,19 @@ class TCPServer:
     def __init__(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # Lưu các client đang kết nối: { "phone_number": socket_object }
-        self.active_clients = {} 
+        # Registry of active sessions: { user_id: ClientHandler }
+        self.active_sessions = {} 
+
+    def register_session(self, user_id, handler):
+        """Registers a user session."""
+        self.active_sessions[user_id] = handler
+        print(f"[SESSION] User {user_id} registered.")
+
+    def unregister_session(self, user_id):
+        """Unregisters a user session."""
+        if user_id in self.active_sessions:
+            del self.active_sessions[user_id]
+            print(f"[SESSION] User {user_id} unregistered.")
 
     def start(self):
         try:

@@ -1,37 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
-import 'package:last_project_client/views/auth/register_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  void _login() async {
+  void _register() async {
     if (_formKey.currentState!.validate()) {
       try {
-        await context.read<AuthController>().login(
+        await context.read<AuthController>().register(
           _phoneController.text.trim(),
           _passwordController.text,
+          _nameController.text.trim(),
         );
-        // On success, the main.dart will handle navigation via AuthController state or we can navigate here
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Login Successful")),
+            const SnackBar(content: Text("Registration Successful")),
           );
+          Navigator.pop(context); // Go back to Login or will be handled by main
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Login Failed: $e"), backgroundColor: Colors.red),
+            SnackBar(content: Text("Registration Failed: $e"), backgroundColor: Colors.red),
           );
         }
       }
@@ -41,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")),
+      appBar: AppBar(title: const Text("Register")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -49,6 +50,12 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: "Display Name"),
+                validator: (value) => (value == null || value.isEmpty) ? "Required" : null,
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _phoneController,
                 decoration: const InputDecoration(labelText: "Phone Number"),
@@ -68,19 +75,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   return auth.isLoading
                       ? const CircularProgressIndicator()
                       : ElevatedButton(
-                          onPressed: _login,
-                          child: const Text("Login"),
+                          onPressed: _register,
+                          child: const Text("Register"),
                         );
                 },
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const RegisterScreen()),
-                  );
-                },
-                child: const Text("Don't have an account? Register"),
               ),
             ],
           ),

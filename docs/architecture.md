@@ -1,21 +1,22 @@
 # Architecture Design
 
-## System Overview
-The project is a client-server application for communication and task management. It utilizes a custom TCP-based protocol for reliable data exchange and SQLite for persistent storage.
+## Implemented Architecture (Milestone 2)
 
-## Components
-### Server (Python)
-- **TCP Server**: Handles incoming socket connections and manages threading.
-- **Client Handler**: Manages individual client lifecycles, protocol framing (length-prefix), and packet routing.
-- **Services**: Business logic for Authentication, Chat, Tasks, and Files.
-- **Storage**: SQLite database for user data and metadata.
+### Server Components (Python)
+- **TCP Server**: Manages incoming socket connections and threading. Maintains `active_sessions` registry.
+- **ClientHandler**: Manages protocol framing (4-byte length-prefix) and packet routing.
+- **Authentication Service**: Business logic for registration and login using `bcrypt`.
+- **SQLite Storage**: Persistent data storage using a lightweight access pattern.
 
-### Client (Flutter)
-- **Network Layer**: `TcpClient` manages the socket connection and packet buffering.
-- **Controllers**: Handle UI logic and communicate with the networking layer.
-- **Views**: Flutter widgets for the user interface.
+### Client Components (Flutter)
+- **Flutter Network Layer**: `TcpClient` for managed socket communication and buffering.
+- **Authentication Service (Dart)**: Networking logic for auth packets with request-response correlation.
+- **Authentication UI**: Login and Register screens with state-driven feedback.
 
-## Communication
-- **Transport**: TCP for all control and data packets.
-- **Framing**: 4-byte length prefix (Big-Endian) followed by a UTF-8 encoded JSON payload.
-- **UDP**: For real-time voice calling (Planned for Milestone 5).
+---
+
+## Planned Architecture (Future Work)
+- **Chat Service**: Real-time messaging and notification routing (Planned for M3).
+- **Task/Kanban Service**: Task lifecycle and assignment management (Planned for M4).
+- **File Service**: Binary data transport and storage management (Planned for M5).
+- **Voice/Call Service**: Call signaling and media transport (Planned for M5).
