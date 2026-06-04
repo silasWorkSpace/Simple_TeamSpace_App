@@ -3,7 +3,10 @@
 ## Approved Goals
 1. Implement User Registration (`AUTH_REGISTER`).
 2. Implement User Login (`AUTH_LOGIN`).
-3. Implement Password Hashing for all stored credentials.
+3. **Password Security**: 
+   - Use `bcrypt` for secure hashing and verification.
+   - Store only `password_hash` in the database.
+   - **NEVER** store raw passwords or reversible encrypted passwords.
 4. Implement Session Mapping (linking active TCP connections to `user_id`).
 5. Handle `AUTH_SUCCESS` and `SYS_ERROR` responses.
 6. Create Authentication UI (Login and Registration screens).
@@ -11,7 +14,6 @@
 ## Technical Proposals (Pending Approval)
 *Note: These are suggested implementation details and are not yet approved design decisions.*
 
-- **Hashing**: Use `bcrypt` for secure password hashing and verification.
 - **Server Organization**: 
   - Centralize database operations in a `server/storage/database.py` helper.
   - Create an `AuthService` in `server/services/auth_service.py` to handle logic.
