@@ -188,3 +188,35 @@ def get_active_contact_ids(user_id):
         return [row[0] for row in cursor.fetchall()]
     finally:
         conn.close()
+
+def get_conversation_list(user_id):
+    """
+    Returns a list of conversation summaries for a user.
+    Each summary includes peer info and the last message.
+    Does NOT include volatile status fields.
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        # Find the latest message ID for each unique peer
+        query = """
+            WITH LastMessageIDs AS (
+                SELECT MAX(id) as max_id
+                FROM messages
+                WHERE sender_id = ? OR receiver_id = ?
+                GROUP BY (CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END)
+            )
+            SELECT 
+                m.*,
+                u.id as peer_id,
+                u.display_name
+            FROM messages m
+            JOIN LastMessageIDs lm ON m.id = lm.max_id
+            JOIN users u ON (CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END) = u.id
+            ORDER BY m.id DESC
+        """
+        cursor.execute(query, (user_id, user_id, user_id, user_id))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()

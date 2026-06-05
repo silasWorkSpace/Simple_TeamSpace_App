@@ -28,6 +28,31 @@
 - **Protocol Rigor**: Adhere strictly to the framing and structure defined in `protocol.md`.
 - **Database Rules**: Follow the "Open-Execute-Close" pattern and parameterized query mandate defined in `development_standards.md`.
 
+### 6. Audit Gate Rule (Mandatory)
+Before any implementation phase begins:
+- **Findings Resolution**: All audit findings must be resolved.
+- **Blockers**: Any unresolved architectural gap, ambiguity, missing dependency, or protocol inconsistency blocks implementation.
+- **Approval Logic**: The presence of a Design Proposal or Implementation Plan alone is NOT approval to code.
+- **Final Gate**: Implementation may begin only after:
+  - Design Proposal approved.
+  - Audit findings resolved.
+  - Implementation Plan approved.
+  - Explicit implementation approval received.
+- **Workflow**: Design -> Audit -> Clarification -> Re-Audit -> Implementation Plan -> Audit -> Explicit Approval -> Implementation.
+- **Forbidden**: Starting implementation while audit questions remain unanswered; assuming missing capabilities; expanding scope to compensate; creating UI flows for missing backend features.
+
+### 7. Scope Lock Rule
+During implementation:
+- **Strict Adherence**: Only files explicitly listed in the approved scope may be modified.
+- **Deviation Protocol**: If implementation requires touching an additional file:
+  1. Stop.
+  2. Explain why.
+  3. Produce a scope expansion proposal.
+  4. Wait for approval.
+- **Implicit Modifications**: Never modify extra files implicitly.
+- **Placeholders**: Never create placeholder features for missing backend functionality without approval.
+- **Assumptions**: Never convert a planning assumption into implemented behavior.
+
 ## Current State
 - **Active Milestone**: None (Transitioning to Milestone 3).
 - **Locked Items**: Core TCP Framing, Bcrypt Auth, Users Schema, Session Mapping.

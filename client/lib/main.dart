@@ -2,23 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 import 'package:last_project_client/services/auth_service.dart';
+import 'package:last_project_client/services/chat_service.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
 import 'package:last_project_client/views/auth/login_screen.dart';
 
 void main() {
   final tcpClient = TcpClient(host: '127.0.0.1', port: 8888);
   final authService = AuthService(tcpClient: tcpClient);
+  final chatService = ChatService(tcpClient: tcpClient);
 
   runApp(
     MultiProvider(
       providers: [
         Provider.value(value: tcpClient),
         Provider.value(value: authService),
+        Provider.value(value: chatService),
         ChangeNotifierProvider(
           create: (_) => AuthController(
             authService: authService,
             tcpClient: tcpClient,
           ),
+        ),
+        ChangeNotifierProxyProvider<AuthController, ChatController>(
+          create: (context) => ChatController(
+            chatService: context.read<ChatService>(),
+            currentUserId: context.read<AuthController>().currentUser?.id,
+          ),
+          update: (context, auth, chatController) => chatController!
+            ..updateCurrentUser(auth.currentUser?.id),
         ),
       ],
       child: const MyApp(),

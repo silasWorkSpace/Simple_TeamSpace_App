@@ -127,6 +127,12 @@ class ClientHandler:
                 return
             ChatService.handle_history_request(self, packet)
 
+        elif p_type == "CHAT_LIST_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChatService.handle_list_request(self, packet)
+
         else:
             print(f"[WARNING] Unhandled packet type: {p_type}")
 

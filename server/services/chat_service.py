@@ -44,7 +44,12 @@ class ChatService:
                 "server_msg_id": server_msg_id,
                 "sender_id": sender_id,
                 "content": content,
-                "created_at": created_at
+                "created_at": created_at,
+                "id": server_msg_id,
+                "client_msg_id": client_msg_id,
+                "receiver_id": receiver_id,
+                "delivered_at": None,
+                "read_at": None
             })
 
     @staticmethod
@@ -89,3 +94,41 @@ class ChatService:
 
         history = database.get_chat_history(handler.user_id, peer_id, limit, before_id)
         handler.send_packet("CHAT_HIST_RESP", {"messages": history}, p_id)
+
+    @staticmethod
+    def handle_list_request(handler, packet):
+        """
+        Handles CHAT_LIST_REQ.
+        Returns a list of conversation summaries.
+        is_online is cross-referenced with active_sessions.
+        """
+        p_id = packet.get("id")
+        user_id = handler.user_id
+
+        # 1. Fetch summaries from DB (No status fields)
+        summaries = database.get_conversation_list(user_id)
+        
+        # 2. Append real-time is_online status
+        formatted_convs = []
+        for s in summaries:
+            peer_id = s['peer_id']
+            # Real-time truth from TCPServer.active_sessions
+            is_online = peer_id in handler.server.active_sessions
+            
+            formatted_convs.append({
+                "peer_id": peer_id,
+                "display_name": s['display_name'],
+                "is_online": is_online,
+                "last_message": {
+                    "id": s['id'],
+                    "client_msg_id": s['client_msg_id'],
+                    "sender_id": s['sender_id'],
+                    "receiver_id": s['receiver_id'],
+                    "content": s['content'],
+                    "created_at": s['created_at'],
+                    "delivered_at": s['delivered_at'],
+                    "read_at": s['read_at']
+                }
+            })
+
+        handler.send_packet("CHAT_LIST_RESP", {"conversations": formatted_convs}, p_id)
