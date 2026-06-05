@@ -2,6 +2,7 @@ import json
 import struct
 import socket
 from services.auth_service import AuthService
+from services.chat_service import ChatService
 from storage import database
 
 class ClientHandler:
@@ -110,6 +111,22 @@ class ClientHandler:
             else:
                 self.send_packet("SYS_ERROR", {"code": result, "message": "Invalid credentials"}, p_id)
         
+        elif p_type == "CHAT_SEND":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChatService.handle_send(self, packet)
+
+        elif p_type == "CHAT_RECEIVED":
+            if not self.user_id: return
+            ChatService.handle_received(self, packet)
+
+        elif p_type == "CHAT_HIST_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChatService.handle_history_request(self, packet)
+
         else:
             print(f"[WARNING] Unhandled packet type: {p_type}")
 

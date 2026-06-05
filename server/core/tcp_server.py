@@ -7,6 +7,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import HOST, TCP_PORT
 from core.client_handler import ClientHandler
+from storage import database
 
 class TCPServer:
     def __init__(self):
@@ -16,15 +17,27 @@ class TCPServer:
         self.active_sessions = {} 
 
     def register_session(self, user_id, handler):
-        """Registers a user session."""
+        """Registers a user session and notifies active contacts."""
         self.active_sessions[user_id] = handler
         print(f"[SESSION] User {user_id} registered.")
+        
+        # Broadcast USER_ONLINE to active contacts
+        contact_ids = database.get_active_contact_ids(user_id)
+        for c_id in contact_ids:
+            if c_id in self.active_sessions:
+                self.active_sessions[c_id].send_packet("USER_ONLINE", {"user_id": user_id})
 
     def unregister_session(self, user_id):
-        """Unregisters a user session."""
+        """Unregisters a user session and notifies active contacts."""
         if user_id in self.active_sessions:
             del self.active_sessions[user_id]
             print(f"[SESSION] User {user_id} unregistered.")
+            
+            # Broadcast USER_OFFLINE to active contacts
+            contact_ids = database.get_active_contact_ids(user_id)
+            for c_id in contact_ids:
+                if c_id in self.active_sessions:
+                    self.active_sessions[c_id].send_packet("USER_OFFLINE", {"user_id": user_id})
 
     def start(self):
         try:
