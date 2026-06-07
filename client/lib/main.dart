@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 import 'package:last_project_client/services/auth_service.dart';
 import 'package:last_project_client/services/chat_service.dart';
+import 'package:last_project_client/controllers/chat_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
 import 'package:last_project_client/views/auth/login_screen.dart';
+import 'package:last_project_client/views/home/main_layout.dart';
 
 void main() {
   final tcpClient = TcpClient(host: '127.0.0.1', port: 8888);
@@ -62,28 +64,7 @@ class AuthWrapper extends StatelessWidget {
     final auth = context.watch<AuthController>();
     
     if (auth.isAuthenticated) {
-      return Scaffold(
-        appBar: AppBar(
-          title: Text("Welcome, ${auth.currentUser?.displayName}"),
-          actions: [
-            IconButton(
-              onPressed: () => context.read<AuthController>().logout(),
-              icon: const Icon(Icons.logout),
-            ),
-          ],
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text("Login Successful!", style: TextStyle(fontSize: 24)),
-              const SizedBox(height: 16),
-              Text("User ID: ${auth.currentUser?.id}"),
-              Text("Phone: ${auth.currentUser?.phone}"),
-            ],
-          ),
-        ),
-      );
+      return const MainLayout();
     }
     
     return const LoginScreen();

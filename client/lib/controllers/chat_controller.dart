@@ -10,6 +10,9 @@ class ChatController extends ChangeNotifier {
   // State: Conversation Messages keyed by Peer ID
   final Map<int, List<MessageModel>> _messages = {};
   
+  // State: Peer Display Names keyed by Peer ID
+  final Map<int, String> _peerNames = {};
+
   // State: Scoped Server IDs for deduplication
   final Map<int, Set<int>> _conversationMsgIds = {};
 
@@ -38,6 +41,8 @@ class ChatController extends ChangeNotifier {
   // Getters
   List<MessageModel> getMessages(int peerId) => _messages[peerId] ?? [];
   bool isOnline(int userId) => _onlineStatus[userId] ?? false;
+  String? getPeerName(int peerId) => _peerNames[peerId];
+  Iterable<int> get activePeers => _messages.keys;
 
   void _init() {
     _chatSubscription = _chatService.chatStream.listen(_onPacketReceived);
@@ -125,6 +130,9 @@ class ChatController extends ChangeNotifier {
       case 'CHAT_HIST_RESP':
         _handleHistoryResponse(data);
         break;
+      case 'CHAT_LIST_RESP':
+        _handleChatListResponse(data);
+        break;
       case 'USER_ONLINE':
         _setOnlineStatus(data['user_id'], true);
         break;
@@ -169,6 +177,11 @@ class ChatController extends ChangeNotifier {
   void _handleChatReceive(Map<String, dynamic> data) {
     final message = MessageModel.fromJson(data);
     final peerId = message.senderId;
+
+    // Metadata Bootstrap
+    if (data.containsKey('sender_display_name')) {
+      _peerNames[peerId] = data['sender_display_name'] as String;
+    }
 
     if (_serverMsgIdSet(peerId).contains(message.id)) return;
 
@@ -242,6 +255,12 @@ class ChatController extends ChangeNotifier {
       final peerId = conv['peer_id'] as int;
       final isOnline = conv['is_online'] as bool;
       final lastMsgData = conv['last_message'] as Map<String, dynamic>;
+
+      // Update Peer Metadata
+      if (conv.containsKey('display_name') && _peerNames[peerId] != conv['display_name']) {
+        _peerNames[peerId] = conv['display_name'] as String;
+        stateChanged = true;
+      }
 
       // 1. Update online status (Always authoritative)
       if (_onlineStatus[peerId] != isOnline) {
@@ -349,6 +368,7 @@ class ChatController extends ChangeNotifier {
 
   void clear() {
     _messages.clear();
+    _peerNames.clear();
     _conversationMsgIds.clear();
     _onlineStatus.clear();
     _pendingRequests.clear();

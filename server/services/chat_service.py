@@ -43,6 +43,7 @@ class ChatService:
             recipient_handler.send_packet("CHAT_RECEIVE", {
                 "server_msg_id": server_msg_id,
                 "sender_id": sender_id,
+                "sender_display_name": handler.display_name,
                 "content": content,
                 "created_at": created_at,
                 "id": server_msg_id,

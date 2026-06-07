@@ -13,6 +13,7 @@ class ClientHandler:
         self.address = address
         self.server = server
         self.user_id = None
+        self.display_name = None
         self.is_running = True
 
     def run(self):
@@ -89,6 +90,7 @@ class ClientHandler:
             success, result = AuthService.register(phone, password, name)
             if success:
                 self.user_id = result["user_id"]
+                self.display_name = result["display_name"]
                 self.server.register_session(self.user_id, self)
                 self.send_packet("AUTH_SUCCESS", result, p_id)
             else:
@@ -106,6 +108,7 @@ class ClientHandler:
             success, result = AuthService.login(phone, password)
             if success:
                 self.user_id = result["user_id"]
+                self.display_name = result["display_name"]
                 self.server.register_session(self.user_id, self)
                 self.send_packet("AUTH_SUCCESS", result, p_id)
             else:
