@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
 import 'package:last_project_client/views/chat/widgets/conversation_tile.dart';
+import 'package:last_project_client/views/chat/conversation_screen.dart';
 
 class ChatTab extends StatelessWidget {
   const ChatTab({super.key});
@@ -44,15 +45,23 @@ class ChatTab extends StatelessWidget {
             
             final lastMsg = messages.last;
             
+            final peerName = chatController.getPeerName(peerId) ?? "User $peerId";
+
             return ConversationTile(
               peerId: peerId,
-              name: chatController.getPeerName(peerId) ?? "User $peerId",
+              name: peerName,
               lastMessage: lastMsg.content,
               timestamp: lastMsg.createdAt,
               isOnline: chatController.isOnline(peerId),
               onTap: () {
-                // TODO: Navigate to ConversationScreen
-                debugPrint("Tapped conversation with $peerId");
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => ConversationScreen(
+                      peerId: peerId,
+                      peerName: peerName,
+                    ),
+                  ),
+                );
               },
             );
           },

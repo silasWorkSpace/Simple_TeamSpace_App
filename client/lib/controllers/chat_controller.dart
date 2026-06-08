@@ -39,6 +39,7 @@ class ChatController extends ChangeNotifier {
   }
 
   // Getters
+  int? get currentUserId => _currentUserId;
   List<MessageModel> getMessages(int peerId) => _messages[peerId] ?? [];
   bool isOnline(int userId) => _onlineStatus[userId] ?? false;
   String? getPeerName(int peerId) => _peerNames[peerId];
