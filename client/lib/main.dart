@@ -28,7 +28,6 @@ void main() {
         ChangeNotifierProxyProvider<AuthController, ChatController>(
           create: (context) => ChatController(
             chatService: context.read<ChatService>(),
-            currentUserId: context.read<AuthController>().currentUser?.id,
           ),
           update: (context, auth, chatController) => chatController!
             ..updateCurrentUser(auth.currentUser?.id),

@@ -32,9 +32,7 @@ class ChatController extends ChangeNotifier {
 
   ChatController({
     required ChatService chatService,
-    int? currentUserId,
-  })  : _chatService = chatService,
-        _currentUserId = currentUserId {
+  })  : _chatService = chatService {
     _init();
   }
 
@@ -51,6 +49,7 @@ class ChatController extends ChangeNotifier {
 
   /// Updates the current user context. Clears state on logout or user change.
   void updateCurrentUser(int? userId) {
+    debugPrint("[CHAT] updateCurrentUser called with userId=$userId");
     if (_currentUserId == userId) return;
 
     debugPrint("[CHAT] User context changed: $_currentUserId -> $userId");
@@ -58,6 +57,12 @@ class ChatController extends ChangeNotifier {
     
     // Always clear state when the user session changes or ends
     clear();
+
+    // Fetch conversation list if a user is logged in
+    if (userId != null) {
+      debugPrint("[CHAT] fetching conversation list");
+      _chatService.fetchConversationList();
+    }
   }
 
   /// Sends a new message.
@@ -115,6 +120,7 @@ class ChatController extends ChangeNotifier {
 
   void _onPacketReceived(Map<String, dynamic> packet) {
     final type = packet['type'] as String;
+    debugPrint("[CHAT] _onPacketReceived type=$type");
     final id = packet['id']?.toString();
     final data = packet['data'] as Map<String, dynamic>? ?? {};
 
@@ -132,6 +138,8 @@ class ChatController extends ChangeNotifier {
         _handleHistoryResponse(data);
         break;
       case 'CHAT_LIST_RESP':
+        debugPrint("[CHAT] CHAT_LIST_RESP received");
+        debugPrint(packet.toString());
         _handleChatListResponse(data);
         break;
       case 'USER_ONLINE':
@@ -248,6 +256,7 @@ class ChatController extends ChangeNotifier {
 
   void _handleChatListResponse(Map<String, dynamic> data) {
     final conversations = data['conversations'] as List<dynamic>? ?? [];
+    debugPrint("[CHAT] conversations=${conversations.length}");
     if (conversations.isEmpty) return;
 
     bool stateChanged = false;
@@ -271,10 +280,13 @@ class ChatController extends ChangeNotifier {
 
       // 2. Initialize conversation ONLY if empty
       if (_messages[peerId] == null || _messages[peerId]!.isEmpty) {
+        debugPrint("[CHAT] parsing last message");
         final lastMsg = MessageModel.fromJson(lastMsgData);
+        debugPrint("[CHAT] parsed message id=${lastMsg.id}");
         
         if (!_serverMsgIdSet(peerId).contains(lastMsg.id)) {
           _messages[peerId] = [lastMsg];
+          debugPrint("[CHAT] inserted peer=$peerId");
           _markIdAsSeen(peerId, lastMsg.id!);
           stateChanged = true;
         }
@@ -282,6 +294,7 @@ class ChatController extends ChangeNotifier {
     }
 
     if (stateChanged) {
+      debugPrint("[CHAT] _handleChatListResponse state changed. peers=${_messages.keys.toList()}");
       notifyListeners();
     }
   }
@@ -368,7 +381,9 @@ class ChatController extends ChangeNotifier {
   }
 
   void clear() {
+    debugPrint("[CHAT] clear() called. current _messages.length=${_messages.length}");
     _messages.clear();
+    debugPrint("[CHAT] clear() finished. current _messages.length=${_messages.length}");
     _peerNames.clear();
     _conversationMsgIds.clear();
     _onlineStatus.clear();

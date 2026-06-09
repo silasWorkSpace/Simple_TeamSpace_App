@@ -64,7 +64,7 @@ class AuthController extends ChangeNotifier {
 
   void logout() {
     _currentUser = null;
-    _tcpClient.dispose(); // Simple logout for now: close connection
+    _tcpClient.disconnect(); 
     notifyListeners();
   }
 

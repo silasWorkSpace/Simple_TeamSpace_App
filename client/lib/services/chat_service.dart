@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 
 class ChatService {
@@ -51,7 +52,9 @@ class ChatService {
 
   /// Requests the list of existing conversations.
   String fetchConversationList() {
+    debugPrint("[CHAT] fetchConversationList called");
     final requestId = "list_${DateTime.now().millisecondsSinceEpoch}";
+    debugPrint("[CHAT] before sendPacket CHAT_LIST_REQ");
     tcpClient.sendPacket(
       "CHAT_LIST_REQ",
       {},

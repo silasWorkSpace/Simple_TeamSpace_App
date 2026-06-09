@@ -79,6 +79,7 @@ class TcpClient {
 
   /// Sends a packet with 4-byte length prefix.
   void sendPacket(String type, Map<String, dynamic> data, {String id = "client-req"}) {
+    debugPrint("[TCP] sendPacket type=$type connected=$_isConnected socket=${_socket != null}");
     if (_socket == null || !_isConnected) return;
 
     final payload = {
@@ -109,6 +110,14 @@ class TcpClient {
     debugPrint("[TCP] Socket Closed");
     _isConnected = false;
     _socket?.destroy();
+  }
+
+  /// Closes the current connection without closing the packet stream.
+  void disconnect() {
+    _socket?.destroy();
+    _socket = null;
+    _isConnected = false;
+    debugPrint("[TCP] Disconnected");
   }
 
   void dispose() {
