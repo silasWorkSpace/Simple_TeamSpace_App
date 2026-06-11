@@ -57,4 +57,29 @@ All packets sent over TCP must follow this format:
 ## Future Packet Types (Proposals)
 - `CHAT_SEND`: Send a message.
 - `CHAT_RECEIVE`: Incoming message notification.
-- `TASK_CREATE`, `TASK_UPDATE`: Kanban operations.
+### Tasks (Milestone 4)
+
+- `TASK_CREATE`: Create a new task.
+  - Data: `{"title": "...", "description": "...", "assignee_id": null}`
+- `TASK_CREATE_RESP`:
+  - Data: `{"task_id": 1, "status": "TODO"}`
+
+- `TASK_UPDATE`: Update task status or details.
+  - Data: `{"task_id": 1, "status": "DOING", "title": "...", "description": "...", "assignee_id": null}`
+- `TASK_UPDATE_RESP`:
+  - Data: `{"task_id": 1}`
+
+- `TASK_DELETE`: Remove a task.
+  - Data: `{"task_id": 1}`
+- `TASK_DELETE_RESP`:
+  - Data: `{"task_id": 1}`
+
+- `TASK_LIST_REQ`: Request tasks visible to the user.
+  - Data: `{}`
+- `TASK_LIST_RESP`: Response with task list.
+  - Data: `{"tasks": [{"id": 1, "title": "...", "status": "TODO", "creator_id": 1, "assignee_id": null, "completed_at": null, ...}]}`
+
+**Permissions Matrix**:
+- **Creator**: Can update `title`, `description`, `assignee_id`, `status`. Can `DELETE`.
+- **Assignee**: Can ONLY update `status`. Cannot `DELETE`.
+- **Uninvolved**: No access (Filtered by `TASK_LIST_REQ` and server validation).

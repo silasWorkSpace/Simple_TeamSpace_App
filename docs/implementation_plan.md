@@ -15,9 +15,14 @@
 - **Persistence**: Finalize `messages` table schema and implement CRUD operations.
 - **Client**: Create `ChatController` and `ChatTab` UI.
 
-### Milestone 4: Kanban
-- **Logic**: Implement `TaskService`.
-- **Persistence**: Finalize `tasks` table schema.
+### Milestone 4: Tasks/Kanban (User-Scoped)
+- **Scope**: A Kanban-style task management system where tasks are private to the creator and assignee.
+- **Phased Implementation**:
+    - **Phase 1 (M4 Initial)**: "Self-Management". Users create and manage their own tasks (`assignee_id` is null or same as `creator_id`). No dependency on user discovery.
+    - **Phase 2 (Future)**: "Collaboration". Integrate `USER_LIST_REQ` to allow assigning tasks to other users.
+- **Logic**: Implement `TaskService` on the server with strict ownership checks (`creator_id` or `assignee_id` must match the session user).
+- **Persistence**: Finalize `tasks` table schema with `creator_id` and `assignee_id` foreign keys.
+- **Client**: `TaskController` for state management and `KanbanTab` for UI.
 
 ### Milestone 5: File Storage + Voice
 - **Logic**: Implement binary chunking for files and signaling for calls.
