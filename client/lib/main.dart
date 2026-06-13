@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 import 'package:last_project_client/services/auth_service.dart';
 import 'package:last_project_client/services/chat_service.dart';
+import 'package:last_project_client/services/task_service.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
+import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
 import 'package:last_project_client/views/auth/login_screen.dart';
 import 'package:last_project_client/views/home/main_layout.dart';
@@ -12,6 +14,7 @@ void main() {
   final tcpClient = TcpClient(host: '127.0.0.1', port: 8888);
   final authService = AuthService(tcpClient: tcpClient);
   final chatService = ChatService(tcpClient: tcpClient);
+  final taskService = TaskService(tcpClient: tcpClient);
 
   runApp(
     MultiProvider(
@@ -19,6 +22,7 @@ void main() {
         Provider.value(value: tcpClient),
         Provider.value(value: authService),
         Provider.value(value: chatService),
+        Provider.value(value: taskService),
         ChangeNotifierProvider(
           create: (_) => AuthController(
             authService: authService,
@@ -30,6 +34,13 @@ void main() {
             chatService: context.read<ChatService>(),
           ),
           update: (context, auth, chatController) => chatController!
+            ..updateCurrentUser(auth.currentUser?.id),
+        ),
+        ChangeNotifierProxyProvider<AuthController, TaskController>(
+          create: (context) => TaskController(
+            taskService: context.read<TaskService>(),
+          ),
+          update: (context, auth, taskController) => taskController!
             ..updateCurrentUser(auth.currentUser?.id),
         ),
       ],

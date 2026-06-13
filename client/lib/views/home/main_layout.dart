@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/views/chat/chat_tab.dart';
+import 'package:last_project_client/views/tasks/kanban_tab.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
+import 'package:last_project_client/controllers/task_controller.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -15,9 +17,9 @@ class _MainLayoutState extends State<MainLayout> {
 
   static final List<Widget> _tabs = [
     const ChatTab(),
-    const Center(child: Text("Tasks - Future Milestone")),
-    const Center(child: Text("Files - Future Milestone")),
-    const Center(child: Text("Calls - Future Milestone")),
+    const KanbanTab(),
+    const Center(child: Text("Storage - Future Milestone")),
+    const Center(child: Text("Voice Calls - Future Milestone")),
   ];
 
   static const List<String> _titles = [
@@ -31,6 +33,13 @@ class _MainLayoutState extends State<MainLayout> {
     setState(() {
       _selectedIndex = index;
     });
+  }
+
+  void _showCreateTaskDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const _CreateTaskDialog(),
+    );
   }
 
   @override
@@ -49,6 +58,12 @@ class _MainLayoutState extends State<MainLayout> {
         index: _selectedIndex,
         children: _tabs,
       ),
+      floatingActionButton: _selectedIndex == 1
+          ? FloatingActionButton(
+              onPressed: () => _showCreateTaskDialog(context),
+              child: const Icon(Icons.add_task),
+            )
+          : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -76,6 +91,73 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CreateTaskDialog extends StatefulWidget {
+  const _CreateTaskDialog();
+
+  @override
+  State<_CreateTaskDialog> createState() => _CreateTaskDialogState();
+}
+
+class _CreateTaskDialogState extends State<_CreateTaskDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _descController;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController();
+    _descController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text("Create New Task"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _titleController,
+            decoration: const InputDecoration(labelText: "Title"),
+            autofocus: true,
+          ),
+          TextField(
+            controller: _descController,
+            decoration: const InputDecoration(labelText: "Description (Optional)"),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final title = _titleController.text.trim();
+            if (title.isNotEmpty) {
+              final desc = _descController.text.trim();
+              context.read<TaskController>().createTask(
+                    title,
+                    description: desc.isEmpty ? null : desc,
+                  );
+              Navigator.pop(context);
+            }
+          },
+          child: const Text("Create"),
+        ),
+      ],
     );
   }
 }

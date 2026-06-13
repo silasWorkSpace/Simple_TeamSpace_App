@@ -1,0 +1,88 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:last_project_client/network/tcp_client.dart';
+
+class TaskService {
+  final TcpClient tcpClient;
+
+  TaskService({required this.tcpClient});
+
+  /// Requests all tasks associated with the current user.
+  String fetchTasks() {
+    debugPrint("[TASK] fetchTasks called");
+    final requestId = "task_list_${DateTime.now().millisecondsSinceEpoch}";
+    tcpClient.sendPacket(
+      "TASK_LIST_REQ",
+      {},
+      id: requestId,
+    );
+    return requestId;
+  }
+
+  /// Creates a new task.
+  String createTask({
+    required String title,
+    String? description,
+    int? assigneeId,
+  }) {
+    debugPrint("[TASK] createTask called: $title");
+    final requestId = "task_create_${DateTime.now().millisecondsSinceEpoch}";
+    tcpClient.sendPacket(
+      "TASK_CREATE_REQ",
+      {
+        "title": title,
+        if (description != null) "description": description,
+        if (assigneeId != null) "assignee_id": assigneeId,
+      },
+      id: requestId,
+    );
+    return requestId;
+  }
+
+  /// Updates an existing task.
+  /// [updates] can contain: title, description, status, assignee_id.
+  String updateTask({
+    required int taskId,
+    required Map<String, dynamic> updates,
+  }) {
+    debugPrint("[TASK] updateTask called for ID $taskId");
+    final requestId = "task_update_${DateTime.now().millisecondsSinceEpoch}";
+    tcpClient.sendPacket(
+      "TASK_UPDATE_REQ",
+      {
+        "task_id": taskId,
+        "updates": updates,
+      },
+      id: requestId,
+    );
+    return requestId;
+  }
+
+  /// Deletes a task by ID.
+  String deleteTask(int taskId) {
+    debugPrint("[TASK] deleteTask called for ID $taskId");
+    final requestId = "task_delete_${DateTime.now().millisecondsSinceEpoch}";
+    tcpClient.sendPacket(
+      "TASK_DELETE_REQ",
+      {"task_id": taskId},
+      id: requestId,
+    );
+    return requestId;
+  }
+
+  /// Stream of all task-related packets.
+  Stream<Map<String, dynamic>> get taskStream => tcpClient.packetStream.where((packet) {
+    final type = packet['type'] as String;
+    final id = packet['id']?.toString() ?? '';
+    
+    // 1. Forward all explicit task packets
+    if (type.startsWith('TASK_')) return true;
+    
+    // 2. Forward SYS_ERROR only if they correlate to a task request
+    if (type == 'SYS_ERROR' && id.startsWith('task_')) {
+      return true;
+    }
+    
+    return false;
+  });
+}
