@@ -3,6 +3,7 @@ import struct
 import socket
 from services.auth_service import AuthService
 from services.chat_service import ChatService
+from services.task_service import TaskService
 from storage import database
 
 class ClientHandler:
@@ -135,6 +136,30 @@ class ClientHandler:
                 self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
                 return
             ChatService.handle_list_request(self, packet)
+
+        elif p_type == "TASK_CREATE_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            TaskService.handle_create(self, packet)
+
+        elif p_type == "TASK_LIST_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            TaskService.handle_list(self, packet)
+
+        elif p_type == "TASK_UPDATE_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            TaskService.handle_update(self, packet)
+
+        elif p_type == "TASK_DELETE_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            TaskService.handle_delete(self, packet)
 
         else:
             print(f"[WARNING] Unhandled packet type: {p_type}")

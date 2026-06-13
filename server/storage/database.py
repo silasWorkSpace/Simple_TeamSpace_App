@@ -10,10 +10,11 @@ def get_connection():
     """Returns a connection to the SQLite database with row factory enabled."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 def init_db():
-    """Initializes the users and messages tables for Milestone 3."""
+    """Initializes the users, messages, and tasks tables."""
     if not os.path.exists('storage'):
         os.makedirs('storage')
         
@@ -54,6 +55,27 @@ def init_db():
         cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedup ON messages(sender_id, client_msg_id)')
         # Index for conversation history
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_id, receiver_id)')
+
+        # Table: tasks (Milestone 4)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT CHECK( status IN ('TODO', 'DOING', 'DONE') ) NOT NULL DEFAULT 'TODO',
+                creator_id INTEGER NOT NULL,
+                assignee_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME,
+                FOREIGN KEY(creator_id) REFERENCES users(id),
+                FOREIGN KEY(assignee_id) REFERENCES users(id)
+            )
+        ''')
+        # Indexes for tasks
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_creator ON tasks(creator_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
         
         conn.commit()
         print("[DATABASE] Tables and indexes initialized.")
@@ -84,6 +106,16 @@ def get_user_by_phone(phone):
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE phone = ?", (phone,))
         return cursor.fetchone()
+    finally:
+        conn.close()
+
+def user_exists(user_id):
+    """Returns True if user_id exists in the users table."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE id = ?", (user_id,))
+        return cursor.fetchone() is not None
     finally:
         conn.close()
 
@@ -220,3 +252,93 @@ def get_conversation_list(user_id):
         return [dict(row) for row in rows]
     finally:
         conn.close()
+
+def create_task(title, description, creator_id, assignee_id=None):
+    """Creates a new task and returns the full task record."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO tasks (title, description, creator_id, assignee_id) VALUES (?, ?, ?, ?)",
+            (title, description, creator_id, assignee_id)
+        )
+        task_id = cursor.lastrowid
+        conn.commit()
+        return get_task_by_id(task_id)
+    finally:
+        conn.close()
+
+def get_task_by_id(task_id):
+    """Fetches a single task by its ID."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def get_user_tasks(user_id):
+    """Fetches all tasks where user is creator OR assignee."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM tasks WHERE creator_id = ? OR assignee_id = ? ORDER BY updated_at DESC",
+            (user_id, user_id)
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+def update_task(task_id, updates):
+    """
+    Updates a task with the provided fields.
+    Handles updated_at and completed_at logic.
+    """
+    if not updates:
+        return get_task_by_id(task_id)
+
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        
+        # Build query dynamically
+        fields = []
+        params = []
+        for key, value in updates.items():
+            fields.append(f"{key} = ?")
+            params.append(value)
+        
+        # Always update updated_at
+        fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        # Status-based completed_at logic
+        if 'status' in updates:
+            if updates['status'] == 'DONE':
+                fields.append("completed_at = CURRENT_TIMESTAMP")
+            else:
+                fields.append("completed_at = NULL")
+        
+        params.append(task_id)
+        query = f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?"
+        
+        cursor.execute(query, params)
+        conn.commit()
+        return get_task_by_id(task_id)
+    finally:
+        conn.close()
+
+def delete_task(task_id):
+    """Deletes a task by its ID. Returns True if successful."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
