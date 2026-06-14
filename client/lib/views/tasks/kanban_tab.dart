@@ -3,9 +3,18 @@ import 'package:provider/provider.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/models/task_model.dart';
 import 'package:intl/intl.dart';
+import 'package:last_project_client/views/tasks/task_edit_dialog.dart';
 
 class KanbanTab extends StatelessWidget {
   const KanbanTab({super.key});
+
+  void _showEditTaskDialog(BuildContext context, TaskModel task) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => TaskEditDialog(task: task),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +99,10 @@ class KanbanTab extends StatelessWidget {
                 padding: const EdgeInsets.all(8),
                 itemCount: tasks.length,
                 itemBuilder: (context, index) {
-                  return TaskCard(task: tasks[index]);
+                  return TaskCard(
+                    task: tasks[index],
+                    onTap: () => _showEditTaskDialog(context, tasks[index]),
+                  );
                 },
               ),
             ),
@@ -103,8 +115,9 @@ class KanbanTab extends StatelessWidget {
 
 class TaskCard extends StatelessWidget {
   final TaskModel task;
+  final VoidCallback? onTap;
 
-  const TaskCard({super.key, required this.task});
+  const TaskCard({super.key, required this.task, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -114,30 +127,34 @@ class TaskCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              task.title,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            if (task.description != null && task.description!.isNotEmpty) ...[
-              const SizedBox(height: 4),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                task.description!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                task.title,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              if (task.description != null && task.description!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  task.description!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                dateFormat.format(task.updatedAt),
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
               ),
             ],
-            const SizedBox(height: 8),
-            Text(
-              dateFormat.format(task.updatedAt),
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-            ),
-          ],
+          ),
         ),
       ),
     );

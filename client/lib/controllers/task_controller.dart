@@ -79,16 +79,18 @@ class TaskController extends ChangeNotifier {
   }
 
   /// Updates task details (Creator only).
-  /// Supports clearing assignee_id by passing clearAssignee: true.
+  /// Supports title, description, status, and assignee_id.
   void updateTaskDetails(int taskId, {
     String? title, 
     String? description, 
+    String? status,
     int? assigneeId,
     bool clearAssignee = false,
   }) {
     final updates = <String, dynamic>{};
     if (title != null) updates['title'] = title;
     if (description != null) updates['description'] = description;
+    if (status != null) updates['status'] = status;
     
     if (clearAssignee) {
       updates['assignee_id'] = null;
@@ -97,12 +99,18 @@ class TaskController extends ChangeNotifier {
     }
 
     if (updates.isNotEmpty) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
       _taskService.updateTask(taskId: taskId, updates: updates);
     }
   }
 
   /// Deletes a task.
   void deleteTask(int taskId) {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
     _taskService.deleteTask(taskId);
   }
 
