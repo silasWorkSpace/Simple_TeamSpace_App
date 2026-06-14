@@ -79,6 +79,13 @@ All packets sent over TCP must follow this format:
 - `TASK_LIST_RESP`: Response with task list.
   - Data: `{"tasks": [{"id": 1, "title": "...", "status": "TODO", "creator_id": 1, "assignee_id": null, "completed_at": null, ...}]}`
 
+### User Discovery (Milestone 4 Phase 3)
+
+- `USER_SEARCH_REQ`: Search for users by name or phone.
+  - Data: `{"query": "..."}`
+- `USER_SEARCH_RESP`: Search results.
+  - Data: `{"users": [{"id": 1, "display_name": "..."}]}`
+
 **Permissions Matrix**:
 - **Creator**: Can update `title`, `description`, `assignee_id`, `status`. Can `DELETE`.
 - **Assignee**: Can ONLY update `status`. Cannot `DELETE`.

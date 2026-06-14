@@ -342,3 +342,22 @@ def delete_task(task_id):
     finally:
         conn.close()
 
+def search_users(query):
+    """
+    Searches for users by display_name or phone.
+    Returns a list of {id, display_name} dicts.
+    Limit 20.
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        search_term = f"%{query}%"
+        cursor.execute(
+            "SELECT id, display_name FROM users WHERE display_name LIKE ? OR phone LIKE ? LIMIT 20",
+            (search_term, search_term)
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+

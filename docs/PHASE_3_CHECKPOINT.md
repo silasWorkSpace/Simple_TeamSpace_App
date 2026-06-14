@@ -1,18 +1,26 @@
-# Phase 3 Checkpoint
+# Milestone 4 Phase 3 Checkpoint
 
 ## Completed
-- **ChatController metadata cache**: Implemented `_peerNames` and logic to populate/clear it.
-- **MainLayout**: Implemented the application shell with `BottomNavigationBar` and `IndexedStack`.
-- **ChatTab**: Implemented the reactive conversation list using `Consumer<ChatController>`.
-- **ConversationTile**: Created the stateless widget for conversation rows with initials logic.
-- **MessageBubble**: Created the stateless widget for chat messages with Material 3 alignment.
-- **Logic Fix**: Resolved `CHAT_LIST_RESP` dispatch bug in `ChatController`.
+- **Protocol**: `USER_SEARCH_REQ` and `USER_SEARCH_RESP` implemented and documented.
+- **Backend Search**: `search_users` in DB matches by name/phone with a limit of 20 and privacy filtering (no phone numbers in response).
+- **Lightweight Discovery**: `UserService` implemented as a stateless wrapper.
+- **UserSearchDialog**:
+    - Debounced search (300ms).
+    - Strict request correlation (packet.id check).
+    - Local state management (no global UserController).
+    - Unassign capability.
+- **TaskEditDialog**:
+    - Integrated "Assignee" selection row.
+    - Updated `updateTaskDetails` to handle `assignee_id` and `clearAssignee` mutations.
 
-## Pending
-- **ChatInput**: Stateful widget for text entry (Audited, awaiting implementation).
-- **ConversationScreen**: Main chat history view widget.
-- **Navigation integration**: Wiring `ChatTab` taps to `ConversationScreen` and `MainLayout` tab transitions.
+## Verification
+- ✅ **Integration Tests**: `verify_discovery.py` passed all 6 scenarios.
+- ✅ **Linter**: `flutter analyze` 0 errors.
+- ✅ **Privacy**: Phone numbers confirmed to stay server-side.
 
-## Analyzer Status
-- **0 errors**
-- **3 warnings** (Known: `serverId` unused, `user_model.dart` unused import, `foundation.dart` unused import)
+## Known Limitations
+- Assignee names are not resolved for existing tasks (shows IDs). Requires future `USER_GET_REQ`.
+
+## Next Step Recommendation
+- **Milestone 4 Phase 4: Drag & Drop Transitions**.
+- **Rationale**: Completes the interactive Kanban experience using existing backend logic.

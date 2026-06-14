@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
 import 'package:last_project_client/models/task_model.dart';
+import 'package:last_project_client/models/user_model.dart';
+import 'package:last_project_client/services/user_service.dart';
+import 'package:last_project_client/network/tcp_client.dart';
+import 'package:last_project_client/views/tasks/user_search_dialog.dart';
 
 class TaskEditDialog extends StatefulWidget {
   final TaskModel task;
@@ -17,6 +21,10 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late String _status;
+  int? _selectedAssigneeId;
+  String? _selectedAssigneeName;
+  bool _clearAssignee = false;
+  
   final _formKey = GlobalKey<FormState>();
 
   @override
@@ -25,6 +33,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
     _titleController = TextEditingController(text: widget.task.title);
     _descriptionController = TextEditingController(text: widget.task.description ?? "");
     _status = widget.task.status;
+    _selectedAssigneeId = widget.task.assigneeId;
   }
 
   @override
@@ -47,9 +56,35 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         status: _status,
+        assigneeId: _clearAssignee ? null : _selectedAssigneeId,
+        clearAssignee: _clearAssignee,
       );
     } else {
       controller.updateTaskStatus(widget.task.id, _status);
+    }
+  }
+
+  void _showUserSearch(BuildContext context) async {
+    final tcpClient = Provider.of<TcpClient>(context, listen: false);
+    final userService = UserService(tcpClient: tcpClient);
+    
+    final result = await showDialog(
+      context: context,
+      builder: (context) => UserSearchDialog(userService: userService),
+    );
+
+    if (result == "clear") {
+      setState(() {
+        _selectedAssigneeId = null;
+        _selectedAssigneeName = null;
+        _clearAssignee = true;
+      });
+    } else if (result is UserModel) {
+      setState(() {
+        _selectedAssigneeId = result.id;
+        _selectedAssigneeName = result.displayName;
+        _clearAssignee = false;
+      });
     }
   }
 
@@ -82,24 +117,17 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
     return Consumer<TaskController>(
       builder: (context, controller, child) {
         // Close dialog on success
-        // Logic: if we were loading and now we aren't, and there's no error,
-        // it means the operation (Update or Delete) succeeded.
-        // But we need to be careful not to close it if it was just a background fetch.
-        // A better way is to check if the task still exists (for update) or is gone (for delete).
-        
         final taskExists = controller.tasks.any((t) => t.id == widget.task.id);
         final currentTask = taskExists 
             ? controller.tasks.firstWhere((t) => t.id == widget.task.id)
             : null;
 
-        // If task is deleted, close dialog
         if (!taskExists && !controller.isLoading && controller.errorMessage == null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) Navigator.pop(context);
           });
         }
         
-        // If task is updated (updatedAt changed) and no longer loading/error, close dialog
         if (currentTask != null && 
             currentTask.updatedAt.isAfter(widget.task.updatedAt) && 
             !controller.isLoading && 
@@ -191,6 +219,22 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                     onChanged: (canChangeStatus && !controller.isLoading) 
                         ? (val) => setState(() => _status = val!) 
                         : null,
+                  ),
+
+                  const SizedBox(height: 16),
+                  
+                  // Assignee Field
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Assignee", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    subtitle: Text(
+                      _clearAssignee 
+                          ? "Unassigned" 
+                          : (_selectedAssigneeName ?? (_selectedAssigneeId?.toString() ?? "Unassigned")),
+                      style: const TextStyle(fontSize: 16, color: Colors.black87),
+                    ),
+                    trailing: isCreator ? const Icon(Icons.edit, size: 20) : null,
+                    onTap: (isCreator && !controller.isLoading) ? () => _showUserSearch(context) : null,
                   ),
                 ],
               ),
