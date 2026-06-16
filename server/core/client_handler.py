@@ -168,6 +168,12 @@ class ClientHandler:
                 return
             UserService.handle_search(self, packet)
 
+        elif p_type == "USER_GET_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            UserService.handle_get(self, packet)
+
         else:
             print(f"[WARNING] Unhandled packet type: {p_type}")
 

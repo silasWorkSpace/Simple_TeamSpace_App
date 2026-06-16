@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
+import 'package:last_project_client/controllers/user_controller.dart';
 import 'package:last_project_client/models/task_model.dart';
 import 'package:last_project_client/models/user_model.dart';
 import 'package:last_project_client/services/user_service.dart';
-import 'package:last_project_client/network/tcp_client.dart';
 import 'package:last_project_client/views/tasks/user_search_dialog.dart';
 
 class TaskEditDialog extends StatefulWidget {
@@ -65,8 +65,8 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
   }
 
   void _showUserSearch(BuildContext context) async {
-    final tcpClient = Provider.of<TcpClient>(context, listen: false);
-    final userService = UserService(tcpClient: tcpClient);
+    final userService = Provider.of<UserService>(context, listen: false);
+    final userController = Provider.of<UserController>(context, listen: false);
     
     final result = await showDialog(
       context: context,
@@ -80,6 +80,8 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
         _clearAssignee = true;
       });
     } else if (result is UserModel) {
+      // Update cache with the manually selected user from search
+      userController.updateCache(result);
       setState(() {
         _selectedAssigneeId = result.id;
         _selectedAssigneeName = result.displayName;
@@ -209,7 +211,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                   const SizedBox(height: 16),
                   
                   DropdownButtonFormField<String>(
-                    initialValue: _status,
+                    value: _status,
                     decoration: const InputDecoration(labelText: "Status"),
                     items: const [
                       DropdownMenuItem(value: "TODO", child: Text("TODO")),
@@ -223,18 +225,29 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
 
                   const SizedBox(height: 16),
                   
-                  // Assignee Field
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text("Assignee", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    subtitle: Text(
-                      _clearAssignee 
-                          ? "Unassigned" 
-                          : (_selectedAssigneeName ?? (_selectedAssigneeId?.toString() ?? "Unassigned")),
-                      style: const TextStyle(fontSize: 16, color: Colors.black87),
+                  // Creator Info
+                  Consumer<UserController>(
+                    builder: (context, userControl, _) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Created By", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      subtitle: Text(userControl.getName(widget.task.creatorId)),
                     ),
-                    trailing: isCreator ? const Icon(Icons.edit, size: 20) : null,
-                    onTap: (isCreator && !controller.isLoading) ? () => _showUserSearch(context) : null,
+                  ),
+
+                  // Assignee Field
+                  Consumer<UserController>(
+                    builder: (context, userControl, _) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Assignee", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      subtitle: Text(
+                        _clearAssignee 
+                            ? "Unassigned" 
+                            : (_selectedAssigneeName ?? userControl.getName(_selectedAssigneeId ?? -1)),
+                        style: const TextStyle(fontSize: 16, color: Colors.black87),
+                      ),
+                      trailing: isCreator ? const Icon(Icons.edit, size: 20) : null,
+                      onTap: (isCreator && !controller.isLoading) ? () => _showUserSearch(context) : null,
+                    ),
                   ),
                 ],
               ),

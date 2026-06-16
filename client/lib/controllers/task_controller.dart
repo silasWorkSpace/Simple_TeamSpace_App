@@ -2,20 +2,28 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:last_project_client/models/task_model.dart';
 import 'package:last_project_client/services/task_service.dart';
+import 'package:last_project_client/controllers/user_controller.dart';
 
 class TaskController extends ChangeNotifier {
   final TaskService _taskService;
+  final UserController _userController;
   int? _currentUserId;
 
   List<TaskModel> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
+  
+  // Track exactly one in-flight moving task (Phase 5A limitation: no packet correlation)
+  int? _movingTaskId;
+  Timer? _movingTimeout;
 
   StreamSubscription? _taskSubscription;
 
   TaskController({
     required TaskService taskService,
-  }) : _taskService = taskService {
+    required UserController userController,
+  }) : _taskService = taskService,
+       _userController = userController {
     _init();
   }
 
@@ -23,6 +31,7 @@ class TaskController extends ChangeNotifier {
   List<TaskModel> get tasks => _tasks;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  int? get movingTaskId => _movingTaskId;
 
   List<TaskModel> get todoTasks => _tasks.where((t) => t.status == 'TODO').toList();
   List<TaskModel> get doingTasks => _tasks.where((t) => t.status == 'DOING').toList();
@@ -70,8 +79,30 @@ class TaskController extends ChangeNotifier {
     );
   }
 
-  /// Updates a task's status.
+  /// Updates a task's status with in-flight tracking for Drag & Drop.
+  /// Phase 5A: Only one status update can be in-flight at a time.
   void updateTaskStatus(int taskId, String newStatus) {
+    if (_movingTaskId != null) {
+      debugPrint("[TASK] Rejected updateTaskStatus for $taskId: Task $_movingTaskId is already moving.");
+      return;
+    }
+
+    _movingTaskId = taskId;
+    _errorMessage = null;
+    
+    // Start timeout recovery timer
+    _movingTimeout?.cancel();
+    _movingTimeout = Timer(const Duration(seconds: 10), () {
+      if (_movingTaskId == taskId) {
+        debugPrint("[TASK] Timeout reached for moving task $taskId. Clearing state.");
+        _movingTaskId = null;
+        _errorMessage = "Update timed out. Please check your connection.";
+        notifyListeners();
+      }
+    });
+
+    notifyListeners();
+
     _taskService.updateTask(
       taskId: taskId,
       updates: {"status": newStatus},
@@ -144,6 +175,17 @@ class TaskController extends ChangeNotifier {
     _sortTasks();
     _isLoading = false;
     debugPrint("[TASK] Loaded ${_tasks.length} tasks");
+
+    // Batch resolve user names immediately after receiving the task list
+    final Set<int> userIdsToResolve = {};
+    for (var task in _tasks) {
+      userIdsToResolve.add(task.creatorId);
+      if (task.assigneeId != null) {
+        userIdsToResolve.add(task.assigneeId!);
+      }
+    }
+    _userController.resolveUsers(userIdsToResolve.toList());
+
     notifyListeners();
   }
 
@@ -157,6 +199,15 @@ class TaskController extends ChangeNotifier {
 
   void _handleTaskUpdateResponse(Map<String, dynamic> data) {
     final updatedTask = TaskModel.fromJson(data['task'] as Map<String, dynamic>);
+    
+    // Clear moving state and cancel timeout if this was the moving task
+    if (_movingTaskId == updatedTask.id) {
+      _movingTaskId = null;
+      _movingTimeout?.cancel();
+      _movingTimeout = null;
+    }
+    _isLoading = false;
+
     final index = _tasks.indexWhere((t) => t.id == updatedTask.id);
     if (index != -1) {
       _tasks[index] = updatedTask;
@@ -179,6 +230,9 @@ class TaskController extends ChangeNotifier {
 
   void _handleError(Map<String, dynamic> data) {
     _isLoading = false;
+    _movingTaskId = null; // Clear moving state on error
+    _movingTimeout?.cancel();
+    _movingTimeout = null;
     _errorMessage = data['message'] as String? ?? "An error occurred";
     debugPrint("[TASK] Error: $_errorMessage");
     notifyListeners();
@@ -188,12 +242,16 @@ class TaskController extends ChangeNotifier {
     _tasks.clear();
     _isLoading = false;
     _errorMessage = null;
+    _movingTaskId = null;
+    _movingTimeout?.cancel();
+    _movingTimeout = null;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _taskSubscription?.cancel();
+    _movingTimeout?.cancel();
     super.dispose();
   }
 }

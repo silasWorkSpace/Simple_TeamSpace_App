@@ -342,6 +342,24 @@ def delete_task(task_id):
     finally:
         conn.close()
 
+def get_users_by_ids(user_ids):
+    """
+    Fetches multiple users by their IDs.
+    Returns a list of {id, display_name} dicts.
+    """
+    if not user_ids:
+        return []
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        placeholders = ', '.join(['?'] * len(user_ids))
+        query = f"SELECT id, display_name FROM users WHERE id IN ({placeholders})"
+        cursor.execute(query, user_ids)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
 def search_users(query):
     """
     Searches for users by display_name or phone.

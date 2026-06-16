@@ -25,7 +25,7 @@ class _UserSearchDialogState extends State<UserSearchDialog> {
   @override
   void initState() {
     super.initState();
-    _userSubscription = widget.userService.userSearchStream.listen(_onPacketReceived);
+    _userSubscription = widget.userService.userStream.listen(_onPacketReceived);
   }
 
   @override

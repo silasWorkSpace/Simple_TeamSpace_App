@@ -4,9 +4,11 @@ import 'package:last_project_client/network/tcp_client.dart';
 import 'package:last_project_client/services/auth_service.dart';
 import 'package:last_project_client/services/chat_service.dart';
 import 'package:last_project_client/services/task_service.dart';
+import 'package:last_project_client/services/user_service.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
+import 'package:last_project_client/controllers/user_controller.dart';
 import 'package:last_project_client/views/auth/login_screen.dart';
 import 'package:last_project_client/views/home/main_layout.dart';
 
@@ -15,6 +17,7 @@ void main() {
   final authService = AuthService(tcpClient: tcpClient);
   final chatService = ChatService(tcpClient: tcpClient);
   final taskService = TaskService(tcpClient: tcpClient);
+  final userService = UserService(tcpClient: tcpClient);
 
   runApp(
     MultiProvider(
@@ -23,8 +26,14 @@ void main() {
         Provider.value(value: authService),
         Provider.value(value: chatService),
         Provider.value(value: taskService),
+        Provider.value(value: userService),
         ChangeNotifierProvider(
-          create: (_) => AuthController(
+          create: (_) => UserController(
+            userService: userService,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => AuthController(
             authService: authService,
             tcpClient: tcpClient,
           ),
@@ -36,12 +45,18 @@ void main() {
           update: (context, auth, chatController) => chatController!
             ..updateCurrentUser(auth.currentUser?.id),
         ),
-        ChangeNotifierProxyProvider<AuthController, TaskController>(
+        ChangeNotifierProxyProvider2<AuthController, UserController, TaskController>(
           create: (context) => TaskController(
             taskService: context.read<TaskService>(),
+            userController: context.read<UserController>(),
           ),
-          update: (context, auth, taskController) => taskController!
-            ..updateCurrentUser(auth.currentUser?.id),
+          update: (context, auth, user, taskController) {
+            // Update cache with current user info
+            if (auth.currentUser != null) {
+              user.updateCache(auth.currentUser!);
+            }
+            return taskController!..updateCurrentUser(auth.currentUser?.id);
+          },
         ),
       ],
       child: const MyApp(),
