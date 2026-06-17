@@ -56,7 +56,7 @@ def init_db():
         # Index for conversation history
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_id, receiver_id)')
 
-        # Table: tasks (Milestone 4)
+        # Table: tasks (Milestone 4 + Phase 6A)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +65,7 @@ def init_db():
                 status TEXT CHECK( status IN ('TODO', 'DOING', 'DONE') ) NOT NULL DEFAULT 'TODO',
                 creator_id INTEGER NOT NULL,
                 assignee_id INTEGER,
+                due_at DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 completed_at DATETIME,
@@ -72,11 +73,32 @@ def init_db():
                 FOREIGN KEY(assignee_id) REFERENCES users(id)
             )
         ''')
+        # Migration: Add due_at if missing
+        cursor.execute("PRAGMA table_info(tasks)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'due_at' not in columns:
+            cursor.execute("ALTER TABLE tasks ADD COLUMN due_at DATETIME")
+            print("[DATABASE] Migrated tasks table: added due_at column.")
+
         # Indexes for tasks
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_creator ON tasks(creator_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
         
+        # Table: task_comments (Phase 6A)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS task_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_comments_task ON task_comments(task_id)')
+
         conn.commit()
         print("[DATABASE] Tables and indexes initialized.")
     finally:
@@ -253,14 +275,14 @@ def get_conversation_list(user_id):
     finally:
         conn.close()
 
-def create_task(title, description, creator_id, assignee_id=None):
-    """Creates a new task and returns the full task record."""
+def create_task(title, description, creator_id, assignee_id=None, due_at=None):
+    """Creates a new task and returns the full task record with comment_count."""
     conn = get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO tasks (title, description, creator_id, assignee_id) VALUES (?, ?, ?, ?)",
-            (title, description, creator_id, assignee_id)
+            "INSERT INTO tasks (title, description, creator_id, assignee_id, due_at) VALUES (?, ?, ?, ?, ?)",
+            (title, description, creator_id, assignee_id, due_at)
         )
         task_id = cursor.lastrowid
         conn.commit()
@@ -269,25 +291,35 @@ def create_task(title, description, creator_id, assignee_id=None):
         conn.close()
 
 def get_task_by_id(task_id):
-    """Fetches a single task by its ID."""
+    """Fetches a single task by its ID with comment_count."""
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        query = """
+            SELECT t.*, 
+                   (SELECT COUNT(*) FROM task_comments WHERE task_id = t.id) as comment_count
+            FROM tasks t 
+            WHERE t.id = ?
+        """
+        cursor.execute(query, (task_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
 
 def get_user_tasks(user_id):
-    """Fetches all tasks where user is creator OR assignee."""
+    """Fetches all tasks where user is creator OR assignee with comment_count."""
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM tasks WHERE creator_id = ? OR assignee_id = ? ORDER BY updated_at DESC",
-            (user_id, user_id)
-        )
+        query = """
+            SELECT t.*, 
+                   (SELECT COUNT(*) FROM task_comments WHERE task_id = t.id) as comment_count
+            FROM tasks t 
+            WHERE t.creator_id = ? OR t.assignee_id = ? 
+            ORDER BY t.updated_at DESC
+        """
+        cursor.execute(query, (user_id, user_id))
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
     finally:
@@ -297,6 +329,7 @@ def update_task(task_id, updates):
     """
     Updates a task with the provided fields.
     Handles updated_at and completed_at logic.
+    Returns authoritative state with comment_count.
     """
     if not updates:
         return get_task_by_id(task_id)
@@ -379,3 +412,21 @@ def search_users(query):
     finally:
         conn.close()
 
+def create_comment(task_id, user_id, content):
+    """Creates a new task comment."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO task_comments (task_id, user_id, content) VALUES (?, ?, ?)",
+            (task_id, user_id, content)
+        )
+        comment_id = cursor.lastrowid
+        conn.commit()
+        
+        # Return the created comment
+        cursor.execute("SELECT * FROM task_comments WHERE id = ?", (comment_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
