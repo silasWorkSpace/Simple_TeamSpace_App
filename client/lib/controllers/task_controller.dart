@@ -155,12 +155,15 @@ class TaskController extends ChangeNotifier {
         _handleTaskListResponse(data);
         break;
       case 'TASK_CREATE_RESP':
+      case 'TASK_CREATED_EVENT':
         _handleTaskCreateResponse(data);
         break;
       case 'TASK_UPDATE_RESP':
+      case 'TASK_UPDATED_EVENT':
         _handleTaskUpdateResponse(data);
         break;
       case 'TASK_DELETE_RESP':
+      case 'TASK_DELETED_EVENT':
         _handleTaskDeleteResponse(data);
         break;
       case 'SYS_ERROR':
@@ -191,9 +194,23 @@ class TaskController extends ChangeNotifier {
 
   void _handleTaskCreateResponse(Map<String, dynamic> data) {
     final task = TaskModel.fromJson(data['task'] as Map<String, dynamic>);
+    
+    // Idempotency guard: Prevent duplicate insertion from EVENT + RESP
+    if (_tasks.any((t) => t.id == task.id)) {
+      debugPrint("[TASK] Skipping creation of existing task: ${task.id}");
+      return;
+    }
+
     _tasks.add(task);
     _sortTasks();
     debugPrint("[TASK] Task created: ${task.id}");
+    
+    // Resolve user names if they aren't already known
+    _userController.resolveUsers([
+      task.creatorId,
+      if (task.assigneeId != null) task.assigneeId!
+    ]);
+
     notifyListeners();
   }
 

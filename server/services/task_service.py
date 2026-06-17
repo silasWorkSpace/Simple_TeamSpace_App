@@ -6,6 +6,41 @@ class TaskService:
     VALID_STATUS = {"TODO", "DOING", "DONE"}
 
     @staticmethod
+    def _get_visible_users(task):
+        """
+        The single source of truth for task visibility.
+        Currently: {creator_id, assignee_id}.
+        Filters out None to prevent routing errors.
+        """
+        visible = {task['creator_id']}
+        if task.get('assignee_id') is not None:
+            visible.add(task['assignee_id'])
+        return visible
+
+    @staticmethod
+    def _broadcast_task_change(old_task, new_task, requester_handler):
+        """
+        Computes the difference in visibility and broadcasts events.
+        Centralized logic for CREATE, UPDATE, DELETE, and REASSIGN.
+        """
+        prev_visible = TaskService._get_visible_users(old_task) if old_task else set()
+        curr_visible = TaskService._get_visible_users(new_task) if new_task else set()
+
+        # 1. Users losing visibility -> TASK_DELETED_EVENT
+        for user_id in (prev_visible - curr_visible):
+            requester_handler.server.broadcast_to_user(user_id, "TASK_DELETED_EVENT", {"task_id": old_task['id']})
+
+        # 2. Users gaining visibility -> TASK_CREATED_EVENT
+        for user_id in (curr_visible - prev_visible):
+            # For the requester, we send RESP. For others (even on different devices), we send EVENT.
+            requester_handler.server.broadcast_to_user(user_id, "TASK_CREATED_EVENT", {"task": new_task}, exclude_handler=requester_handler)
+
+        # 3. Users with persistent visibility -> TASK_UPDATED_EVENT
+        for user_id in (prev_visible & curr_visible):
+            # Exclude requester_handler to satisfy "No self-event" mandate
+            requester_handler.server.broadcast_to_user(user_id, "TASK_UPDATED_EVENT", {"task": new_task}, exclude_handler=requester_handler)
+
+    @staticmethod
     def handle_create(handler, packet):
         """
         Handles TASK_CREATE_REQ.
@@ -32,10 +67,11 @@ class TaskService:
         # 2. Database Execution
         try:
             task = database.create_task(title.strip(), description, creator_id, assignee_id)
-            # Response Contract: TASK_CREATE_RESP { "task": { ... } }
+            # Response to requester
             handler.send_packet("TASK_CREATE_RESP", {"task": task}, p_id)
+            # Broadcast to others
+            TaskService._broadcast_task_change(None, task, handler)
         except Exception as e:
-            # Code 400 for validation/constraint failures as requested
             handler.send_packet("SYS_ERROR", {"code": 400, "message": str(e)}, p_id)
 
     @staticmethod
@@ -72,15 +108,15 @@ class TaskService:
             handler.send_packet("SYS_ERROR", {"code": 400, "message": "No updates provided"}, p_id)
             return
 
-        # 1. Fetch task for permission check
-        task = database.get_task_by_id(task_id)
-        if not task:
+        # 1. Fetch task for permission check and snapshot
+        old_task = database.get_task_by_id(task_id)
+        if not old_task:
             handler.send_packet("SYS_ERROR", {"code": 404, "message": "Task not found"}, p_id)
             return
 
         # 2. Permission Model
-        is_creator = task['creator_id'] == user_id
-        is_assignee = task['assignee_id'] == user_id
+        is_creator = old_task['creator_id'] == user_id
+        is_assignee = old_task['assignee_id'] == user_id
 
         if not is_creator and not is_assignee:
             handler.send_packet("SYS_ERROR", {"code": 403, "message": "Permission denied"}, p_id)
@@ -89,12 +125,10 @@ class TaskService:
         # 3. Filter updates based on role
         allowed_updates = {}
         if is_creator:
-            # Creator: Full control
             for field in ['title', 'description', 'status', 'assignee_id']:
                 if field in updates:
                     allowed_updates[field] = updates[field]
         else:
-            # Assignee: Status only
             if 'status' in updates:
                 allowed_updates['status'] = updates['status']
             
@@ -110,23 +144,24 @@ class TaskService:
              handler.send_packet("SYS_ERROR", {"code": 400, "message": "No valid updates for your role"}, p_id)
              return
 
-        # 4. Status Validation (Shared Constant)
+        # 4. Validations
         if 'status' in allowed_updates:
             if allowed_updates['status'] not in TaskService.VALID_STATUS:
                 handler.send_packet("SYS_ERROR", {"code": 400, "message": f"Invalid status. Must be one of {TaskService.VALID_STATUS}"}, p_id)
                 return
 
-        # 5. Assignee Validation (if creator is changing it)
         if 'assignee_id' in allowed_updates and allowed_updates['assignee_id'] is not None:
             if not database.user_exists(allowed_updates['assignee_id']):
                 handler.send_packet("SYS_ERROR", {"code": 400, "message": "New assignee does not exist"}, p_id)
                 return
 
-        # 6. Apply to DB
+        # 5. Apply to DB
         try:
-            updated_task = database.update_task(task_id, allowed_updates)
-            # Response Contract: TASK_UPDATE_RESP { "task": { ... } }
-            handler.send_packet("TASK_UPDATE_RESP", {"task": updated_task}, p_id)
+            new_task = database.update_task(task_id, allowed_updates)
+            # Response to requester
+            handler.send_packet("TASK_UPDATE_RESP", {"task": new_task}, p_id)
+            # Broadcast to others
+            TaskService._broadcast_task_change(old_task, new_task, handler)
         except Exception as e:
             handler.send_packet("SYS_ERROR", {"code": 400, "message": str(e)}, p_id)
 
@@ -146,18 +181,20 @@ class TaskService:
             handler.send_packet("SYS_ERROR", {"code": 400, "message": "task_id is required"}, p_id)
             return
 
-        task = database.get_task_by_id(task_id)
-        if not task:
+        old_task = database.get_task_by_id(task_id)
+        if not old_task:
             handler.send_packet("SYS_ERROR", {"code": 404, "message": "Task not found"}, p_id)
             return
 
         # Permission Check: Creator only
-        if task['creator_id'] != user_id:
+        if old_task['creator_id'] != user_id:
             handler.send_packet("SYS_ERROR", {"code": 403, "message": "Only the creator can delete this task"}, p_id)
             return
 
         if database.delete_task(task_id):
-            # Response Contract: TASK_DELETE_RESP { "task_id": X }
+            # Response to requester
             handler.send_packet("TASK_DELETE_RESP", {"task_id": task_id}, p_id)
+            # Broadcast to others
+            TaskService._broadcast_task_change(old_task, None, handler)
         else:
             handler.send_packet("SYS_ERROR", {"code": 500, "message": "Delete failed"}, p_id)

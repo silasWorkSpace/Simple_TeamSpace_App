@@ -37,28 +37,26 @@ class ChatService:
             "created_at": created_at
         }, p_id)
 
-        # 3. Route to recipient if online and not a duplicate (redundant but safe)
-        recipient_handler = handler.server.active_sessions.get(receiver_id)
-        if recipient_handler:
-            recipient_handler.send_packet("CHAT_RECEIVE", {
-                "server_msg_id": server_msg_id,
-                "sender_id": sender_id,
-                "sender_display_name": handler.display_name,
-                "content": content,
-                "created_at": created_at,
-                "id": server_msg_id,
-                "client_msg_id": client_msg_id,
-                "receiver_id": receiver_id,
-                "delivered_at": None,
-                "read_at": None
-            })
+        # 3. Route to recipient(s) if online
+        handler.server.broadcast_to_user(receiver_id, "CHAT_RECEIVE", {
+            "server_msg_id": server_msg_id,
+            "sender_id": sender_id,
+            "sender_display_name": handler.display_name,
+            "content": content,
+            "created_at": created_at,
+            "id": server_msg_id,
+            "client_msg_id": client_msg_id,
+            "receiver_id": receiver_id,
+            "delivered_at": None,
+            "read_at": None
+        })
 
     @staticmethod
     def handle_received(handler, packet):
         """
         Handles CHAT_RECEIVED from recipient.
         1. Updates delivered_at in DB.
-        2. Routes CHAT_DELIVERED to sender if online.
+        2. Routes CHAT_DELIVERED to sender's active devices.
         """
         p_data = packet.get("data", {})
         server_msg_id = p_data.get("server_msg_id")
@@ -70,14 +68,12 @@ class ChatService:
         delivered_at, client_msg_id, sender_id = database.update_delivered_status(server_msg_id)
         
         if delivered_at and sender_id:
-            # 2. Notify original sender
-            sender_handler = handler.server.active_sessions.get(sender_id)
-            if sender_handler:
-                sender_handler.send_packet("CHAT_DELIVERED", {
-                    "client_msg_id": client_msg_id,
-                    "server_msg_id": server_msg_id,
-                    "delivered_at": delivered_at
-                })
+            # 2. Notify original sender's devices
+            handler.server.broadcast_to_user(sender_id, "CHAT_DELIVERED", {
+                "client_msg_id": client_msg_id,
+                "server_msg_id": server_msg_id,
+                "delivered_at": delivered_at
+            })
 
     @staticmethod
     def handle_history_request(handler, packet):

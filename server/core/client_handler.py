@@ -91,6 +91,10 @@ class ClientHandler:
 
             success, result = AuthService.register(phone, password, name)
             if success:
+                # Unregister old session if exists
+                if self.user_id:
+                    self.server.unregister_session(self.user_id, self)
+                
                 self.user_id = result["user_id"]
                 self.display_name = result["display_name"]
                 self.server.register_session(self.user_id, self)
@@ -109,6 +113,10 @@ class ClientHandler:
 
             success, result = AuthService.login(phone, password)
             if success:
+                # Unregister old session if exists
+                if self.user_id:
+                    self.server.unregister_session(self.user_id, self)
+                    
                 self.user_id = result["user_id"]
                 self.display_name = result["display_name"]
                 self.server.register_session(self.user_id, self)
@@ -181,8 +189,7 @@ class ClientHandler:
         """Closes the socket and cleans up resources."""
         self.is_running = False
         if self.user_id:
-            self.server.unregister_session(self.user_id)
-            database.update_online_status(self.user_id, False)
+            self.server.unregister_session(self.user_id, self)
         
         try:
             self.client_socket.close()

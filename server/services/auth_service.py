@@ -21,8 +21,6 @@ class AuthService:
         # 3. Create user
         user_id = database.create_user(phone, password_hash, display_name)
         if user_id:
-            # Update online status (Auto-login)
-            database.update_online_status(user_id, True)
             user = {
                 "user_id": user_id,
                 "phone": phone,
@@ -47,7 +45,6 @@ class AuthService:
         # Verify password
         if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
             user_id = user_row['id']
-            database.update_online_status(user_id, True)
             user = {
                 "user_id": user_id,
                 "phone": user_row['phone'],
