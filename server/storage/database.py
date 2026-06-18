@@ -430,3 +430,14 @@ def create_comment(task_id, user_id, content):
         return dict(row) if row else None
     finally:
         conn.close()
+
+def get_comments_for_task(task_id):
+    """Fetches all comments for a specific task."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM task_comments WHERE task_id = ? ORDER BY id ASC", (task_id,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()

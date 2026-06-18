@@ -5,6 +5,7 @@ from services.auth_service import AuthService
 from services.chat_service import ChatService
 from services.task_service import TaskService
 from services.user_service import UserService
+from services.comment_service import CommentService
 from storage import database
 
 class ClientHandler:
@@ -169,6 +170,18 @@ class ClientHandler:
                 self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
                 return
             TaskService.handle_delete(self, packet)
+
+        elif p_type == "COMMENT_SEND_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            CommentService.handle_send(self, packet)
+
+        elif p_type == "COMMENT_LIST_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            CommentService.handle_list(self, packet)
 
         elif p_type == "USER_SEARCH_REQ":
             if not self.user_id:
