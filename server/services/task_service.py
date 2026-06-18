@@ -1,4 +1,5 @@
 from storage import database
+import datetime
 
 class TaskService:
     """Handles task management: CRUD operations and permissions."""
@@ -6,7 +7,21 @@ class TaskService:
     VALID_STATUS = {"TODO", "DOING", "DONE"}
 
     @staticmethod
-    def _get_visible_users(task):
+    def _validate_due_at(date_str):
+        """Validates that a string is a strict ISO-8601 UTC datetime or None."""
+        if date_str is None:
+            return True
+        try:
+            # Expected format: "YYYY-MM-DDTHH:mm:ssZ"
+            if not isinstance(date_str, str) or not date_str.endswith('Z'):
+                return False
+            datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def get_visible_users(task):
         """
         The single source of truth for task visibility.
         Currently: {creator_id, assignee_id}.
@@ -18,13 +33,21 @@ class TaskService:
         return visible
 
     @staticmethod
+    def can_view_task(task_id, user_id):
+        """Checks if a user has visibility of a task."""
+        task = database.get_task_by_id(task_id)
+        if not task:
+            return False
+        return user_id in TaskService.get_visible_users(task)
+
+    @staticmethod
     def _broadcast_task_change(old_task, new_task, requester_handler):
         """
         Computes the difference in visibility and broadcasts events.
         Centralized logic for CREATE, UPDATE, DELETE, and REASSIGN.
         """
-        prev_visible = TaskService._get_visible_users(old_task) if old_task else set()
-        curr_visible = TaskService._get_visible_users(new_task) if new_task else set()
+        prev_visible = TaskService.get_visible_users(old_task) if old_task else set()
+        curr_visible = TaskService.get_visible_users(new_task) if new_task else set()
 
         # 1. Users losing visibility -> TASK_DELETED_EVENT
         for user_id in (prev_visible - curr_visible):
@@ -44,7 +67,7 @@ class TaskService:
     def handle_create(handler, packet):
         """
         Handles TASK_CREATE_REQ.
-        Contract: { "title": "...", "description": "...", "assignee_id": ID|None }
+        Contract: { "title": "...", "description": "...", "assignee_id": ID|None, "due_at": "YYYY-MM-DDTHH:mm:ssZ"|None }
         """
         p_id = packet.get("id")
         p_data = packet.get("data", {})
@@ -52,11 +75,17 @@ class TaskService:
         title = p_data.get("title")
         description = p_data.get("description")
         assignee_id = p_data.get("assignee_id")
+        due_at = p_data.get("due_at")
         creator_id = handler.user_id
 
         # Validation: Title required
         if not title or not title.strip():
             handler.send_packet("SYS_ERROR", {"code": 400, "message": "Title is required"}, p_id)
+            return
+
+        # Explicit Date Validation
+        if "due_at" in p_data and not TaskService._validate_due_at(due_at):
+            handler.send_packet("SYS_ERROR", {"code": 400, "message": "Invalid due_at format. Must be ISO-8601 UTC (e.g. 2026-06-30T18:00:00Z) or null"}, p_id)
             return
 
         # 1. Explicit Assignee Validation
@@ -66,7 +95,7 @@ class TaskService:
 
         # 2. Database Execution
         try:
-            task = database.create_task(title.strip(), description, creator_id, assignee_id)
+            task = database.create_task(title.strip(), description, creator_id, assignee_id, due_at)
             # Response to requester
             handler.send_packet("TASK_CREATE_RESP", {"task": task}, p_id)
             # Broadcast to others
@@ -91,7 +120,7 @@ class TaskService:
     def handle_update(handler, packet):
         """
         Handles TASK_UPDATE_REQ.
-        Payload Contract: { "task_id": X, "updates": { "status": "...", etc } }
+        Payload Contract: { "task_id": X, "updates": { "status": "...", "due_at": "..." } }
         """
         p_id = packet.get("id")
         p_data = packet.get("data", {})
@@ -125,10 +154,11 @@ class TaskService:
         # 3. Filter updates based on role
         allowed_updates = {}
         if is_creator:
-            for field in ['title', 'description', 'status', 'assignee_id']:
+            for field in ['title', 'description', 'status', 'assignee_id', 'due_at']:
                 if field in updates:
                     allowed_updates[field] = updates[field]
         else:
+            # Assignee: Status only
             if 'status' in updates:
                 allowed_updates['status'] = updates['status']
             
@@ -153,6 +183,11 @@ class TaskService:
         if 'assignee_id' in allowed_updates and allowed_updates['assignee_id'] is not None:
             if not database.user_exists(allowed_updates['assignee_id']):
                 handler.send_packet("SYS_ERROR", {"code": 400, "message": "New assignee does not exist"}, p_id)
+                return
+
+        if 'due_at' in allowed_updates:
+            if not TaskService._validate_due_at(allowed_updates['due_at']):
+                handler.send_packet("SYS_ERROR", {"code": 400, "message": "Invalid due_at format. Must be ISO-8601 UTC (e.g. 2026-06-30T18:00:00Z) or null"}, p_id)
                 return
 
         # 5. Apply to DB
