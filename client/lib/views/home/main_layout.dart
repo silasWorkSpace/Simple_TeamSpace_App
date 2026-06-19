@@ -4,6 +4,7 @@ import 'package:last_project_client/views/chat/chat_tab.dart';
 import 'package:last_project_client/views/tasks/kanban_tab.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
+import 'package:last_project_client/network/tcp_client.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -14,6 +15,39 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
+  late final TcpClient _tcpClient;
+  bool _wasDisconnected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tcpClient = context.read<TcpClient>();
+    _tcpClient.connectionState.addListener(_onConnectionChanged);
+  }
+
+  @override
+  void dispose() {
+    _tcpClient.connectionState.removeListener(_onConnectionChanged);
+    super.dispose();
+  }
+
+  void _onConnectionChanged() {
+    final state = _tcpClient.connectionState.value;
+    if (state == TcpConnectionState.disconnected) {
+      _wasDisconnected = true;
+    } else if (state == TcpConnectionState.connected && _wasDisconnected) {
+      _wasDisconnected = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Connected"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
 
   static final List<Widget> _tabs = [
     const ChatTab(),
@@ -54,9 +88,33 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _tabs,
+      body: Column(
+        children: [
+          ValueListenableBuilder<TcpConnectionState>(
+            valueListenable: context.read<TcpClient>().connectionState,
+            builder: (context, state, child) {
+              if (state == TcpConnectionState.disconnected) {
+                return Container(
+                  width: double.infinity,
+                  color: Colors.red.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  child: const Text(
+                    'Connection lost. Some actions may be unavailable.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          Expanded(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: _tabs,
+            ),
+          ),
+        ],
       ),
       floatingActionButton: _selectedIndex == 1
           ? FloatingActionButton(

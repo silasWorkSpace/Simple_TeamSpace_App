@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
+enum TcpConnectionState { initial, connecting, connected, disconnected }
+
 class TcpClient {
   Socket? _socket;
   final String host;
@@ -12,6 +14,9 @@ class TcpClient {
   final _packetController = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get packetStream => _packetController.stream;
 
+  final ValueNotifier<TcpConnectionState> connectionState = 
+      ValueNotifier<TcpConnectionState>(TcpConnectionState.initial);
+
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
@@ -19,9 +24,11 @@ class TcpClient {
 
   /// Establishes connection to the server.
   Future<void> connect() async {
+    connectionState.value = TcpConnectionState.connecting;
     try {
       _socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
       _isConnected = true;
+      connectionState.value = TcpConnectionState.connected;
       debugPrint("[TCP] Connected to $host:$port");
 
       _socket!.listen(
@@ -33,6 +40,7 @@ class TcpClient {
     } catch (e) {
       debugPrint("[TCP] Connection failed: $e");
       _isConnected = false;
+      connectionState.value = TcpConnectionState.disconnected;
       rethrow;
     }
   }
@@ -104,11 +112,13 @@ class TcpClient {
   void _onError(error) {
     debugPrint("[TCP] Socket Error: $error");
     _isConnected = false;
+    connectionState.value = TcpConnectionState.disconnected;
   }
 
   void _onDone() {
     debugPrint("[TCP] Socket Closed");
     _isConnected = false;
+    connectionState.value = TcpConnectionState.disconnected;
     _socket?.destroy();
   }
 
@@ -117,6 +127,7 @@ class TcpClient {
     _socket?.destroy();
     _socket = null;
     _isConnected = false;
+    connectionState.value = TcpConnectionState.disconnected;
     debugPrint("[TCP] Disconnected");
   }
 

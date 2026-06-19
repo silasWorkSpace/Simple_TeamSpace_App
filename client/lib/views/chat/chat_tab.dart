@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
+import 'package:last_project_client/controllers/auth_controller.dart';
+import 'package:last_project_client/services/user_service.dart';
+import 'package:last_project_client/models/user_model.dart';
 import 'package:last_project_client/views/chat/widgets/conversation_tile.dart';
 import 'package:last_project_client/views/chat/conversation_screen.dart';
+import 'package:last_project_client/views/tasks/user_search_dialog.dart';
 
 class ChatTab extends StatelessWidget {
   const ChatTab({super.key});
@@ -78,44 +82,40 @@ class ChatTab extends StatelessWidget {
     );
   }
 
-  void _showNewChatDialog(BuildContext context) {
-    final controller = TextEditingController();
-    showDialog(
+  Future<void> _showNewChatDialog(BuildContext context) async {
+    final userService = Provider.of<UserService>(context, listen: false);
+    final authController = Provider.of<AuthController>(context, listen: false);
+    final currentUserId = authController.currentUser?.id;
+
+    final result = await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("New Chat"),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: "Enter User ID",
-            hintText: "e.g. 1, 2, 3",
-          ),
-          keyboardType: TextInputType.number,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () {
-              final id = int.tryParse(controller.text);
-              if (id != null) {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => ConversationScreen(
-                      peerId: id,
-                      peerName: "User $id",
-                    ),
-                  ),
-                );
-              }
-            },
-            child: const Text("Start"),
-          ),
-        ],
-      ),
+      builder: (context) => UserSearchDialog(userService: userService),
     );
+
+    // Explicitly ignore 'clear' or null results.
+    if (result is UserModel) {
+      if (!context.mounted) return;
+
+      // 1. Prevent self-chat
+      if (result.id == currentUserId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You cannot start a chat with yourself.')),
+        );
+        return;
+      }
+
+      // 2. Open conversation
+      // Since ConversationScreen relies entirely on fetching history by peerId,
+      // there is no "Create Chat" API required. Pushing the screen naturally
+      // resumes any existing conversation without creating duplicates.
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ConversationScreen(
+            peerId: result.id,
+            peerName: result.displayName,
+          ),
+        ),
+      );
+    }
   }
 }
