@@ -20,10 +20,16 @@ class TaskService {
   }
 
   /// Creates a new task.
+  ///
+  /// [dueAt] must be an ISO-8601 UTC string ending in 'Z'
+  /// (e.g. "2026-06-30T18:00:00Z"), matching the server's
+  /// _validate_due_at() contract in task_service.py.
+  /// Pass null or omit to create a task with no due date.
   String createTask({
     required String title,
     String? description,
     int? assigneeId,
+    String? dueAt,
   }) {
     debugPrint("[TASK] createTask called: $title");
     final requestId = "task_create_${DateTime.now().millisecondsSinceEpoch}";
@@ -33,6 +39,7 @@ class TaskService {
         "title": title,
         if (description != null) "description": description,
         if (assigneeId != null) "assignee_id": assigneeId,
+        if (dueAt != null) "due_at": dueAt,
       },
       id: requestId,
     );

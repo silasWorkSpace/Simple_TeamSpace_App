@@ -1,33 +1,45 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:last_project_client/models/comment_model.dart';
 import 'package:last_project_client/models/task_model.dart';
+import 'package:last_project_client/services/comment_service.dart';
 import 'package:last_project_client/services/task_service.dart';
 import 'package:last_project_client/controllers/user_controller.dart';
 
 class TaskController extends ChangeNotifier {
   final TaskService _taskService;
+  final CommentService _commentService;
   final UserController _userController;
   int? _currentUserId;
 
   List<TaskModel> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
-  
+
   // Track exactly one in-flight moving task (Phase 5A limitation: no packet correlation)
   int? _movingTaskId;
   Timer? _movingTimeout;
 
+  // Phase 6A: Comment state.
+  // Key: taskId → chronological list of CommentModel.
+  // Populated lazily on first fetchComments() call for each task.
+  final Map<int, List<CommentModel>> _taskComments = {};
+
   StreamSubscription? _taskSubscription;
+  StreamSubscription? _commentSubscription;
 
   TaskController({
     required TaskService taskService,
+    required CommentService commentService,
     required UserController userController,
   }) : _taskService = taskService,
+       _commentService = commentService,
        _userController = userController {
     _init();
   }
 
-  // Getters
+  // --- Getters ---
+
   List<TaskModel> get tasks => _tasks;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -37,8 +49,14 @@ class TaskController extends ChangeNotifier {
   List<TaskModel> get doingTasks => _tasks.where((t) => t.status == 'DOING').toList();
   List<TaskModel> get doneTasks => _tasks.where((t) => t.status == 'DONE').toList();
 
+  /// Returns the cached comment list for [taskId].
+  /// Returns an empty const list if comments have not yet been fetched.
+  List<CommentModel> commentsFor(int taskId) =>
+      _taskComments[taskId] ?? const [];
+
   void _init() {
     _taskSubscription = _taskService.taskStream.listen(_onPacketReceived);
+    _commentSubscription = _commentService.commentStream.listen(_onCommentPacket);
   }
 
   /// Updates the current user context. Clears state on logout or user change.
@@ -79,6 +97,27 @@ class TaskController extends ChangeNotifier {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Phase 6A – Comment API
+  // ---------------------------------------------------------------------------
+
+  /// Requests the full comment list for [taskId] from the server.
+  /// The result is delivered asynchronously via [_handleCommentListResponse].
+  void fetchComments(int taskId) {
+    debugPrint('[COMMENT] fetchComments called for task $taskId');
+    _commentService.fetchComments(taskId);
+  }
+
+  /// Sends a new comment on [taskId].
+  /// Trims whitespace and silently ignores empty content.
+  /// The persisted comment is delivered back via [_handleCommentReceived].
+  void sendComment(int taskId, String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return;
+    debugPrint('[COMMENT] sendComment called for task $taskId');
+    _commentService.sendComment(taskId: taskId, content: trimmed);
+  }
+
   /// Updates a task's status with in-flight tracking for Drag & Drop.
   /// Phase 5A: Only one status update can be in-flight at a time.
   void updateTaskStatus(int taskId, String newStatus) {
@@ -110,23 +149,36 @@ class TaskController extends ChangeNotifier {
   }
 
   /// Updates task details (Creator only).
-  /// Supports title, description, status, and assignee_id.
+  /// Supports title, description, status, assignee_id, and due_at.
+  ///
+  /// Pass [clearDueDate]=true to explicitly remove the due date (sends null
+  /// to the server). Pass [dueAt] as an ISO-8601 UTC string (ending in 'Z')
+  /// to set a new due date. Omit both to leave the due date unchanged.
   void updateTaskDetails(int taskId, {
-    String? title, 
-    String? description, 
+    String? title,
+    String? description,
     String? status,
     int? assigneeId,
     bool clearAssignee = false,
+    String? dueAt,
+    bool clearDueDate = false,
   }) {
     final updates = <String, dynamic>{};
     if (title != null) updates['title'] = title;
     if (description != null) updates['description'] = description;
     if (status != null) updates['status'] = status;
-    
+
     if (clearAssignee) {
       updates['assignee_id'] = null;
     } else if (assigneeId != null) {
       updates['assignee_id'] = assigneeId;
+    }
+
+    // Phase 6A: due date. clearDueDate sends explicit null to erase.
+    if (clearDueDate) {
+      updates['due_at'] = null;
+    } else if (dueAt != null) {
+      updates['due_at'] = dueAt;
     }
 
     if (updates.isNotEmpty) {
@@ -136,6 +188,7 @@ class TaskController extends ChangeNotifier {
       _taskService.updateTask(taskId: taskId, updates: updates);
     }
   }
+
 
   /// Deletes a task.
   void deleteTask(int taskId) {
@@ -257,6 +310,7 @@ class TaskController extends ChangeNotifier {
 
   void clear() {
     _tasks.clear();
+    _taskComments.clear(); // Evict all cached comments on session change/logout
     _isLoading = false;
     _errorMessage = null;
     _movingTaskId = null;
@@ -265,9 +319,82 @@ class TaskController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------------------
+  // Phase 6A – Comment packet handlers
+  // ---------------------------------------------------------------------------
+
+  void _onCommentPacket(Map<String, dynamic> packet) {
+    final type = packet['type'] as String;
+    debugPrint('[COMMENT] _onCommentPacket type=$type');
+    final data = packet['data'] as Map<String, dynamic>? ?? {};
+
+    switch (type) {
+      case 'COMMENT_LIST_RESP':
+        _handleCommentListResponse(data);
+        break;
+      // Both RESP and EVENT carry { "comment": {...} } and are handled identically.
+      // The idempotency guard in _handleCommentReceived prevents duplicates.
+      case 'COMMENT_SEND_RESP':
+      case 'COMMENT_CREATED_EVENT':
+        _handleCommentReceived(data);
+        break;
+      case 'SYS_ERROR':
+        _handleError(data);
+        break;
+    }
+  }
+
+  /// Replaces the cached list for the given task with the authoritative server list.
+  void _handleCommentListResponse(Map<String, dynamic> data) {
+    final taskId = data['task_id'] as int;
+    final rawComments = data['comments'] as List<dynamic>? ?? [];
+    _taskComments[taskId] = rawComments
+        .map((c) => CommentModel.fromJson(c as Map<String, dynamic>))
+        .toList();
+    debugPrint(
+        '[COMMENT] Loaded ${_taskComments[taskId]!.length} comments for task $taskId');
+    // Resolve display names for all comment authors in one batch
+    final authorIds = _taskComments[taskId]!.map((c) => c.userId).toSet().toList();
+    _userController.resolveUsers(authorIds);
+    notifyListeners();
+  }
+
+  /// Appends a single new comment to the in-memory list.
+  ///
+  /// Handles both COMMENT_SEND_RESP (from the originating device) and
+  /// COMMENT_CREATED_EVENT (pushed to all other visible participants).
+  ///
+  /// Idempotency guarantee (Phase 5B contract): if a comment with the same
+  /// server-assigned [id] already exists in the list — e.g. because the RESP
+  /// and the EVENT both arrive before the list is re-fetched — it is silently
+  /// dropped to prevent duplicates.
+  void _handleCommentReceived(Map<String, dynamic> data) {
+    final commentJson = data['comment'] as Map<String, dynamic>?;
+    if (commentJson == null) {
+      debugPrint('[COMMENT] _handleCommentReceived: missing comment payload');
+      return;
+    }
+
+    final comment = CommentModel.fromJson(commentJson);
+    final list = _taskComments.putIfAbsent(comment.taskId, () => []);
+
+    // Idempotency guard: reject duplicates from concurrent RESP + EVENT delivery
+    if (list.any((c) => c.id == comment.id)) {
+      debugPrint('[COMMENT] Duplicate comment ${comment.id} dropped');
+      return;
+    }
+
+    list.add(comment);
+    // Resolve the author's display name if not yet cached
+    _userController.resolveUsers([comment.userId]);
+    debugPrint('[COMMENT] Comment ${comment.id} added to task ${comment.taskId}');
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _taskSubscription?.cancel();
+    _commentSubscription?.cancel();
     _movingTimeout?.cancel();
     super.dispose();
   }

@@ -5,6 +5,8 @@ class TaskModel {
   final String status;
   final int creatorId;
   final int? assigneeId;
+  final DateTime? dueAt;
+  final int commentCount;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? completedAt;
@@ -16,6 +18,8 @@ class TaskModel {
     required this.status,
     required this.creatorId,
     this.assigneeId,
+    this.dueAt,
+    this.commentCount = 0,
     required this.createdAt,
     required this.updatedAt,
     this.completedAt,
@@ -29,10 +33,19 @@ class TaskModel {
       status: json['status'] as String,
       creatorId: json['creator_id'] as int,
       assigneeId: json['assignee_id'] as int?,
+      // due_at arrives as an ISO-8601 UTC string (e.g. "2026-06-30T18:00:00Z")
+      // or null when no due date is set.
+      dueAt: json['due_at'] != null
+          ? DateTime.parse(json['due_at'] as String).toLocal()
+          : null,
+      // comment_count is injected by the server-side SQL subquery.
+      // Defaults to 0 for forward-compatibility with any cached payloads
+      // that pre-date the Phase 6A schema migration.
+      commentCount: json['comment_count'] as int? ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
-      completedAt: json['completed_at'] != null 
-          ? DateTime.parse(json['completed_at'] as String) 
+      completedAt: json['completed_at'] != null
+          ? DateTime.parse(json['completed_at'] as String)
           : null,
     );
   }
@@ -45,6 +58,10 @@ class TaskModel {
       'status': status,
       'creator_id': creatorId,
       'assignee_id': assigneeId,
+      // Serialize back to UTC ISO-8601 with 'Z' suffix — required by the
+      // server's _validate_due_at() check in task_service.py.
+      'due_at': dueAt?.toUtc().toIso8601String(),
+      'comment_count': commentCount,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'completed_at': completedAt?.toIso8601String(),
@@ -58,9 +75,12 @@ class TaskModel {
     String? status,
     int? creatorId,
     int? assigneeId,
+    // Use Object? sentinel to distinguish "set to null" from "not provided".
+    Object? dueAt = _sentinel,
+    int? commentCount,
     DateTime? createdAt,
     DateTime? updatedAt,
-    DateTime? completedAt,
+    Object? completedAt = _sentinel,
   }) {
     return TaskModel(
       id: id ?? this.id,
@@ -69,9 +89,16 @@ class TaskModel {
       status: status ?? this.status,
       creatorId: creatorId ?? this.creatorId,
       assigneeId: assigneeId ?? this.assigneeId,
+      dueAt: dueAt == _sentinel ? this.dueAt : dueAt as DateTime?,
+      commentCount: commentCount ?? this.commentCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      completedAt: completedAt ?? this.completedAt,
+      completedAt: completedAt == _sentinel ? this.completedAt : completedAt as DateTime?,
     );
   }
 }
+
+// Private sentinel object used by copyWith to distinguish between
+// "caller passed null explicitly" and "caller did not pass the argument".
+// This is the standard Dart pattern for nullable copyWith parameters.
+const Object _sentinel = Object();

@@ -199,6 +199,24 @@ class TaskCard extends StatelessWidget {
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
+                // ── Phase 6A: due-date badge + comment count chip ──────────
+                // Both read directly from TaskModel fields; zero network calls.
+                if (task.dueAt != null || task.commentCount > 0) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      if (task.dueAt != null)
+                        _DueDateBadge(
+                          dueAt: task.dueAt!,
+                          isDone: task.status == 'DONE',
+                        ),
+                      if (task.commentCount > 0)
+                        _CommentCountChip(count: task.commentCount),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -243,6 +261,66 @@ class TaskCard extends StatelessWidget {
     );
   }
 }
+
+// ── Phase 6A: badge widgets ────────────────────────────────────────────────
+
+/// Displays the task's due date with urgency colouring.
+///
+/// Colour rules (no network, pure DateTime math):
+/// - Completed tasks (isDone): always grey — no urgency needed.
+/// - Past due + not done: red.
+/// - Due within the next 24 hours: orange.
+/// - Future deadline: neutral grey.
+class _DueDateBadge extends StatelessWidget {
+  final DateTime dueAt;
+  final bool isDone;
+
+  const _DueDateBadge({required this.dueAt, required this.isDone});
+
+  Color get _color {
+    if (isDone) return Colors.grey.shade500;
+    final now = DateTime.now();
+    if (dueAt.isBefore(now)) return Colors.red.shade700;       // overdue
+    if (dueAt.difference(now).inHours < 24) return Colors.orange.shade700; // imminent
+    return Colors.grey.shade600;                                // future
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = DateFormat('MMM dd').format(dueAt.toLocal());
+    final color = _color;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.calendar_today, size: 10, color: color),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(fontSize: 10, color: color)),
+      ],
+    );
+  }
+}
+
+/// Displays the number of comments on a task card.
+class _CommentCountChip extends StatelessWidget {
+  final int count;
+
+  const _CommentCountChip({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.grey.shade500;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.comment_outlined, size: 10, color: color),
+        const SizedBox(width: 3),
+        Text('$count', style: TextStyle(fontSize: 10, color: color)),
+      ],
+    );
+  }
+}
+
+// ── Colour utility ────────────────────────────────────────────────────────────
 
 extension ColorExtension on Color {
   Color darken([double amount = .1]) {
