@@ -1,5 +1,12 @@
 from storage import database
 import datetime
+from services.activity_service import (
+    ActivityService, 
+    TASK_CREATED, 
+    STATUS_CHANGED, 
+    ASSIGNEE_CHANGED, 
+    DUE_DATE_CHANGED
+)
 
 class TaskService:
     """Handles task management: CRUD operations and permissions."""
@@ -96,6 +103,10 @@ class TaskService:
         # 2. Database Execution
         try:
             task = database.create_task(title.strip(), description, creator_id, assignee_id, due_at)
+            
+            # Log Activity (Phase 6B)
+            ActivityService.log_activity(task['id'], creator_id, TASK_CREATED, {})
+
             # Response to requester
             handler.send_packet("TASK_CREATE_RESP", {"task": task}, p_id)
             # Broadcast to others
@@ -193,6 +204,26 @@ class TaskService:
         # 5. Apply to DB
         try:
             new_task = database.update_task(task_id, allowed_updates)
+            
+            # Log Activities (Phase 6B)
+            if old_task['status'] != new_task['status']:
+                ActivityService.log_activity(task_id, user_id, STATUS_CHANGED, {
+                    "from": old_task['status'],
+                    "to": new_task['status']
+                })
+            
+            if old_task['assignee_id'] != new_task['assignee_id']:
+                ActivityService.log_activity(task_id, user_id, ASSIGNEE_CHANGED, {
+                    "from": old_task['assignee_id'],
+                    "to": new_task['assignee_id']
+                })
+                
+            if old_task['due_at'] != new_task['due_at']:
+                ActivityService.log_activity(task_id, user_id, DUE_DATE_CHANGED, {
+                    "from": old_task['due_at'],
+                    "to": new_task['due_at']
+                })
+
             # Response to requester
             handler.send_packet("TASK_UPDATE_RESP", {"task": new_task}, p_id)
             # Broadcast to others

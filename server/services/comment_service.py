@@ -1,5 +1,6 @@
 from storage import database
 from services.task_service import TaskService
+from services.activity_service import ActivityService, COMMENT_ADDED
 
 class CommentService:
     """Handles task comment operations and real-time broadcasting."""
@@ -34,7 +35,13 @@ class CommentService:
                 handler.send_packet("SYS_ERROR", {"code": 500, "message": "Failed to create comment"}, p_id)
                 return
             
-            # TODO: Hook into Activity Log (Phase 6B)
+            # Hook into Activity Log (Phase 6B)
+            # Store comment_id and a short preview for UI rendering
+            preview = comment['content'][:50] + ('...' if len(comment['content']) > 50 else '')
+            ActivityService.log_activity(task_id, user_id, COMMENT_ADDED, {
+                "comment_id": comment['id'],
+                "preview": preview
+            })
 
             # 3. Respond to Requester (H_orig)
             handler.send_packet("COMMENT_SEND_RESP", {"comment": comment}, p_id)

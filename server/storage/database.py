@@ -99,6 +99,22 @@ def init_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_comments_task ON task_comments(task_id)')
 
+        # Table: activity_logs (Phase 6B)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS activity_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                user_id INTEGER,
+                action_type TEXT NOT NULL,
+                details TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_logs(task_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_task_created ON activity_logs(task_id, created_at)')
+
         conn.commit()
         print("[DATABASE] Tables and indexes initialized.")
     finally:
