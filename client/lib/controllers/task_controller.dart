@@ -2,13 +2,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:last_project_client/models/comment_model.dart';
 import 'package:last_project_client/models/task_model.dart';
+import 'package:last_project_client/models/activity_model.dart';
 import 'package:last_project_client/services/comment_service.dart';
 import 'package:last_project_client/services/task_service.dart';
+import 'package:last_project_client/services/activity_service.dart';
 import 'package:last_project_client/controllers/user_controller.dart';
 
 class TaskController extends ChangeNotifier {
   final TaskService _taskService;
   final CommentService _commentService;
+  final ActivityService _activityService;
   final UserController _userController;
   int? _currentUserId;
 
@@ -21,19 +24,23 @@ class TaskController extends ChangeNotifier {
   Timer? _movingTimeout;
 
   // Phase 6A: Comment state.
-  // Key: taskId → chronological list of CommentModel.
-  // Populated lazily on first fetchComments() call for each task.
   final Map<int, List<CommentModel>> _taskComments = {};
+
+  // Phase 6B: Activity state.
+  final Map<int, List<ActivityModel>> _taskActivities = {};
 
   StreamSubscription? _taskSubscription;
   StreamSubscription? _commentSubscription;
+  StreamSubscription? _activitySubscription;
 
   TaskController({
     required TaskService taskService,
     required CommentService commentService,
+    required ActivityService activityService,
     required UserController userController,
   }) : _taskService = taskService,
        _commentService = commentService,
+       _activityService = activityService,
        _userController = userController {
     _init();
   }
@@ -54,9 +61,14 @@ class TaskController extends ChangeNotifier {
   List<CommentModel> commentsFor(int taskId) =>
       _taskComments[taskId] ?? const [];
 
+  /// Returns the cached activity list for [taskId].
+  List<ActivityModel> activitiesFor(int taskId) =>
+      _taskActivities[taskId] ?? const [];
+
   void _init() {
     _taskSubscription = _taskService.taskStream.listen(_onPacketReceived);
     _commentSubscription = _commentService.commentStream.listen(_onCommentPacket);
+    _activitySubscription = _activityService.activityStream.listen(_onActivityPacket);
   }
 
   /// Updates the current user context. Clears state on logout or user change.
@@ -106,6 +118,11 @@ class TaskController extends ChangeNotifier {
   void fetchComments(int taskId) {
     debugPrint('[COMMENT] fetchComments called for task $taskId');
     _commentService.fetchComments(taskId);
+  }
+
+  /// Requests the full activity list for [taskId] from the server.
+  void fetchActivities(int taskId) {
+    _activityService.fetchActivities(taskId);
   }
 
   /// Sends a new comment on [taskId].
@@ -311,6 +328,7 @@ class TaskController extends ChangeNotifier {
   void clear() {
     _tasks.clear();
     _taskComments.clear(); // Evict all cached comments on session change/logout
+    _taskActivities.clear(); // Evict activities
     _isLoading = false;
     _errorMessage = null;
     _movingTaskId = null;
@@ -391,10 +409,55 @@ class TaskController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------------------
+  // Phase 6B – Activity packet handlers
+  // ---------------------------------------------------------------------------
+
+  void _onActivityPacket(Map<String, dynamic> packet) {
+    final type = packet['type'] as String;
+    final data = packet['data'] as Map<String, dynamic>? ?? {};
+
+    switch (type) {
+      case 'ACTIVITY_LIST_RESP':
+        _handleActivityListResponse(data);
+        break;
+      case 'SYS_ERROR':
+        _handleError(data);
+        break;
+    }
+  }
+
+  void _handleActivityListResponse(Map<String, dynamic> data) {
+    final taskId = data['task_id'] as int;
+    final rawActivities = data['activities'] as List<dynamic>? ?? [];
+    
+    _taskActivities[taskId] = rawActivities
+        .map((a) => ActivityModel.fromJson(a as Map<String, dynamic>))
+        .toList();
+        
+    // Resolve user display names
+    final userIdsToResolve = <int>{};
+    for (final act in _taskActivities[taskId]!) {
+      if (act.userId != null) userIdsToResolve.add(act.userId!);
+      // If it's an ASSIGNEE_CHANGED action, pre-resolve the involved IDs
+      if (act.actionType == 'ASSIGNEE_CHANGED') {
+        if (act.details['from'] != null) userIdsToResolve.add(act.details['from'] as int);
+        if (act.details['to'] != null) userIdsToResolve.add(act.details['to'] as int);
+      }
+    }
+    
+    if (userIdsToResolve.isNotEmpty) {
+      _userController.resolveUsers(userIdsToResolve.toList());
+    }
+    
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _taskSubscription?.cancel();
     _commentSubscription?.cancel();
+    _activitySubscription?.cancel();
     _movingTimeout?.cancel();
     super.dispose();
   }

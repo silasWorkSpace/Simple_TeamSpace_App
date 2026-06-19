@@ -5,6 +5,7 @@ import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
 import 'package:last_project_client/controllers/user_controller.dart';
 import 'package:last_project_client/models/comment_model.dart';
+import 'package:last_project_client/models/activity_model.dart';
 import 'package:last_project_client/models/task_model.dart';
 import 'package:last_project_client/models/user_model.dart';
 import 'package:last_project_client/services/user_service.dart';
@@ -60,6 +61,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<TaskController>().fetchComments(widget.task.id);
+        context.read<TaskController>().fetchActivities(widget.task.id);
       }
     });
   }
@@ -259,6 +261,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
         final canChangeStatus = isCreator || isAssignee;
 
         final comments = controller.commentsFor(widget.task.id);
+        final activities = controller.activitiesFor(widget.task.id);
 
         return AlertDialog(
           title: Row(
@@ -410,6 +413,10 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                     // ── Phase 6A: Comments ───────────────────────────────────
                     const Divider(height: 24),
                     _buildCommentSection(context, controller, comments),
+
+                    // ── Phase 6B: Activity ───────────────────────────────────
+                    const Divider(height: 24),
+                    _buildActivitySection(context, controller, activities),
                   ],
                 ),
               ),
@@ -594,6 +601,96 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                 ),
               ],
             ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ── Activity log widget ────────────────────────────────────────────────────
+
+  Widget _buildActivitySection(
+    BuildContext context,
+    TaskController controller,
+    List<ActivityModel> activities,
+  ) {
+    return Consumer<UserController>(
+      builder: (context, userControl, _) {
+        final timeFormat = DateFormat('MMM dd, HH:mm');
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(Icons.history, size: 13, color: Colors.grey.shade600),
+                const SizedBox(width: 4),
+                Text(
+                  'Activity (${activities.length})',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // List
+            if (activities.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'No activity yet.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade400,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: activities.length,
+                  itemBuilder: (context, index) {
+                    final a = activities[index];
+                    final description = a.buildDescription(userControl.getName);
+                    final userName = a.userId != null
+                        ? userControl.getName(a.userId!)
+                        : 'System';
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.circle, size: 6, color: Colors.grey.shade400),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: RichText(
+                              text: TextSpan(
+                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                children: [
+                                  TextSpan(
+                                    text: '$userName ',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  TextSpan(text: '$description '),
+                                  TextSpan(
+                                    text: timeFormat.format(a.createdAt),
+                                    style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         );
       },

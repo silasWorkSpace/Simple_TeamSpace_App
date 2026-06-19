@@ -5,6 +5,7 @@ import 'package:last_project_client/services/auth_service.dart';
 import 'package:last_project_client/services/chat_service.dart';
 import 'package:last_project_client/services/comment_service.dart';
 import 'package:last_project_client/services/task_service.dart';
+import 'package:last_project_client/services/activity_service.dart';
 import 'package:last_project_client/services/user_service.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
@@ -18,6 +19,7 @@ void main() {
   final authService = AuthService(tcpClient: tcpClient);
   final chatService = ChatService(tcpClient: tcpClient);
   final commentService = CommentService(tcpClient: tcpClient);
+  final activityService = ActivityService(tcpClient: tcpClient);
   final taskService = TaskService(tcpClient: tcpClient);
   final userService = UserService(tcpClient: tcpClient);
 
@@ -28,6 +30,7 @@ void main() {
         Provider.value(value: authService),
         Provider.value(value: chatService),
         Provider.value(value: commentService),
+        Provider.value(value: activityService),
         Provider.value(value: taskService),
         Provider.value(value: userService),
         ChangeNotifierProvider(
@@ -51,7 +54,8 @@ void main() {
         ChangeNotifierProxyProvider2<AuthController, UserController, TaskController>(
           create: (context) => TaskController(
             taskService: context.read<TaskService>(),
-            commentService: commentService, // injected directly: already in scope
+            commentService: commentService, // injected directly
+            activityService: activityService, // injected directly
             userController: context.read<UserController>(),
           ),
           update: (context, auth, user, taskController) {
