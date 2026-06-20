@@ -55,7 +55,7 @@ class UserController extends ChangeNotifier {
     _inflightRequests[requestId] = toResolve.toSet();
     _allPendingIds.addAll(toResolve);
 
-    debugPrint("[USER] Registering inflight request $requestId for IDs: $toResolve");
+
 
     // Dispatch the network call via UserService (stateless)
     _userService.getUsers(toResolve, requestId: requestId);
@@ -86,7 +86,7 @@ class UserController extends ChangeNotifier {
         _allPendingIds.removeAll(resolvedSet);
       }
       
-      debugPrint("[USER] Resolved ${usersRaw.length} users for batch $requestId. Cache size: ${_userNameCache.length}");
+
       notifyListeners();
     } 
     else if (type == 'SYS_ERROR') {
@@ -94,7 +94,7 @@ class UserController extends ChangeNotifier {
       final failedSet = _inflightRequests.remove(requestId);
       if (failedSet != null) {
         _allPendingIds.removeAll(failedSet);
-        debugPrint("[USER] Batch $requestId failed: ${data['message']}");
+
       }
     }
   }

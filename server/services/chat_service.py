@@ -1,7 +1,63 @@
+import uuid
 from storage import database
 
 class ChatService:
     """Handles core chat logic: persistence, routing, and history."""
+
+    @staticmethod
+    def handle_file_complete(server, token, uploader_id, uploader_display_name,
+                             receiver_id, filename, size_bytes, msg_type=None, metadata=None):
+        """
+        Called by file_service after a binary upload completes.
+        Persists a chat message with msg_type='file' (or 'image' or provided) and routes
+        the CHAT_RECEIVE packet to the recipient using existing broadcast logic.
+        """
+        import os
+        
+        # Use provided msg_type or fallback to extension inference
+        if not msg_type:
+            ext = os.path.splitext(filename)[1].lower()
+            msg_type = 'image' if ext in ('.png', '.jpg', '.jpeg', '.gif', '.webp') else 'file'
+
+        # Use provided metadata or fallback to standard file metadata
+        if not metadata:
+            metadata = {}
+        
+        # Always inject standard file info into metadata
+        metadata["filename"] = filename
+        metadata["size_bytes"] = size_bytes
+
+        client_msg_id = f"file_{token}"
+
+        # Persist the chat message referencing the file token
+        server_msg_id, created_at, _ = database.create_message(
+            client_msg_id, uploader_id, receiver_id, token,
+            msg_type=msg_type,
+            metadata=metadata
+        )
+
+        payload = {
+            "server_msg_id": server_msg_id,
+            "sender_id": uploader_id,
+            "sender_display_name": uploader_display_name,
+            "content": token,
+            "msg_type": msg_type,
+            "metadata": metadata,
+            "created_at": created_at,
+            "id": server_msg_id,
+            "client_msg_id": client_msg_id,
+            "receiver_id": receiver_id,
+            "delivered_at": None,
+            "read_at": None,
+        }
+
+        if receiver_id < 0:
+            # Broadcast to all active sessions (channel message)
+            for uid in list(server.active_sessions.keys()):
+                if uid != uploader_id:
+                    server.broadcast_to_user(uid, "CHAT_RECEIVE", payload)
+        else:
+            server.broadcast_to_user(receiver_id, "CHAT_RECEIVE", payload)
 
     @staticmethod
     def handle_send(handler, packet):
@@ -16,16 +72,18 @@ class ChatService:
         
         client_msg_id = p_data.get("client_msg_id")
         receiver_id = p_data.get("receiver_id")
-        content = p_data.get("content")
+        content = p_data.get("content", "")
+        msg_type = p_data.get("msg_type", "text")
+        metadata = p_data.get("metadata", None)
         sender_id = handler.user_id
 
-        if not all([client_msg_id, receiver_id, content]):
+        if client_msg_id is None or receiver_id is None:
             handler.send_packet("SYS_ERROR", {"code": 400, "message": "Missing chat fields"}, p_id)
             return
 
         # 1. Persist
         server_msg_id, created_at, is_duplicate = database.create_message(
-            client_msg_id, sender_id, receiver_id, content
+            client_msg_id, sender_id, receiver_id, content, msg_type=msg_type, metadata=metadata
         )
 
         # 2. Confirm to sender
@@ -38,18 +96,38 @@ class ChatService:
         }, p_id)
 
         # 3. Route to recipient(s) if online
-        handler.server.broadcast_to_user(receiver_id, "CHAT_RECEIVE", {
-            "server_msg_id": server_msg_id,
-            "sender_id": sender_id,
-            "sender_display_name": handler.display_name,
-            "content": content,
-            "created_at": created_at,
-            "id": server_msg_id,
-            "client_msg_id": client_msg_id,
-            "receiver_id": receiver_id,
-            "delivered_at": None,
-            "read_at": None
-        })
+        if receiver_id < 0:
+            for uid in list(handler.server.active_sessions.keys()):
+                if uid != sender_id:
+                    handler.server.broadcast_to_user(uid, "CHAT_RECEIVE", {
+                        "server_msg_id": server_msg_id,
+                        "sender_id": sender_id,
+                        "sender_display_name": handler.display_name,
+                        "content": content,
+                        "msg_type": msg_type,
+                        "metadata": metadata,
+                        "created_at": created_at,
+                        "id": server_msg_id,
+                        "client_msg_id": client_msg_id,
+                        "receiver_id": receiver_id,
+                        "delivered_at": None,
+                        "read_at": None
+                    })
+        else:
+            handler.server.broadcast_to_user(receiver_id, "CHAT_RECEIVE", {
+                "server_msg_id": server_msg_id,
+                "sender_id": sender_id,
+                "sender_display_name": handler.display_name,
+                "content": content,
+                "msg_type": msg_type,
+                "metadata": metadata,
+                "created_at": created_at,
+                "id": server_msg_id,
+                "client_msg_id": client_msg_id,
+                "receiver_id": receiver_id,
+                "delivered_at": None,
+                "read_at": None
+            })
 
     @staticmethod
     def handle_received(handler, packet):

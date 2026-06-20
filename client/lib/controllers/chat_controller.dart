@@ -49,10 +49,10 @@ class ChatController extends ChangeNotifier {
 
   /// Updates the current user context. Clears state on logout or user change.
   void updateCurrentUser(int? userId) {
-    debugPrint("[CHAT] updateCurrentUser called with userId=$userId");
+
     if (_currentUserId == userId) return;
 
-    debugPrint("[CHAT] User context changed: $_currentUserId -> $userId");
+
     _currentUserId = userId;
     
     // Always clear state when the user session changes or ends
@@ -60,13 +60,18 @@ class ChatController extends ChangeNotifier {
 
     // Fetch conversation list if a user is logged in
     if (userId != null) {
-      debugPrint("[CHAT] fetching conversation list");
+
       _chatService.fetchConversationList();
     }
   }
 
   /// Sends a new message.
-  void sendMessage(int receiverId, String content) {
+  void sendMessage(
+    int receiverId,
+    String content, {
+    String? msgType,
+    MessageMetadata? metadata,
+  }) {
     if (_currentUserId == null) return;
 
     final clientMsgId = "${DateTime.now().millisecondsSinceEpoch}_$_currentUserId";
@@ -76,6 +81,8 @@ class ChatController extends ChangeNotifier {
       senderId: _currentUserId!,
       receiverId: receiverId,
       content: content,
+      msgType: msgType ?? MessageType.text,
+      metadata: metadata ?? const MessageMetadata(),
       createdAt: DateTime.now(),
       status: MessageStatus.sending,
     );
@@ -91,6 +98,8 @@ class ChatController extends ChangeNotifier {
       clientMsgId: clientMsgId,
       receiverId: receiverId,
       content: content,
+      msgType: msgType,
+      metadata: metadata?.toJson(),
     );
     _pendingRequests[requestId] = clientMsgId;
   }
@@ -109,6 +118,8 @@ class ChatController extends ChangeNotifier {
       clientMsgId: message.clientMsgId,
       receiverId: message.receiverId,
       content: message.content,
+      msgType: message.msgType,
+      metadata: message.metadata.toJson(),
     );
     _pendingRequests[requestId] = message.clientMsgId;
   }
@@ -120,7 +131,7 @@ class ChatController extends ChangeNotifier {
 
   void _onPacketReceived(Map<String, dynamic> packet) {
     final type = packet['type'] as String;
-    debugPrint("[CHAT] _onPacketReceived type=$type");
+
     final id = packet['id']?.toString();
     final data = packet['data'] as Map<String, dynamic>? ?? {};
 
@@ -138,8 +149,8 @@ class ChatController extends ChangeNotifier {
         _handleHistoryResponse(data);
         break;
       case 'CHAT_LIST_RESP':
-        debugPrint("[CHAT] CHAT_LIST_RESP received");
-        debugPrint(packet.toString());
+
+
         _handleChatListResponse(data);
         break;
       case 'USER_ONLINE':
@@ -185,10 +196,10 @@ class ChatController extends ChangeNotifier {
 
   void _handleChatReceive(Map<String, dynamic> data) {
     final message = MessageModel.fromJson(data);
-    final peerId = message.senderId;
+    final peerId = message.receiverId < 0 ? message.receiverId : message.senderId;
 
     // Metadata Bootstrap
-    if (data.containsKey('sender_display_name')) {
+    if (data.containsKey('sender_display_name') && message.receiverId > 0) {
       _peerNames[peerId] = data['sender_display_name'] as String;
     }
 
@@ -203,7 +214,6 @@ class ChatController extends ChangeNotifier {
 
   void _handleChatDelivered(Map<String, dynamic> data) {
     final clientMsgId = data['client_msg_id'] as String;
-    final serverId = data['server_msg_id'] as int;
     final deliveredAt = DateTime.parse(data['delivered_at'] as String);
 
     // Find message locally
@@ -238,7 +248,9 @@ class ChatController extends ChangeNotifier {
 
     for (var raw in rawMessages) {
       final msg = MessageModel.fromJson(raw as Map<String, dynamic>);
-      peerId ??= (msg.senderId == _currentUserId ? msg.receiverId : msg.senderId);
+      peerId ??= (msg.receiverId < 0) 
+          ? msg.receiverId 
+          : (msg.senderId == _currentUserId ? msg.receiverId : msg.senderId);
 
       if (!_serverMsgIdSet(peerId).contains(msg.id)) {
         newMessages.add(msg);
@@ -256,7 +268,7 @@ class ChatController extends ChangeNotifier {
 
   void _handleChatListResponse(Map<String, dynamic> data) {
     final conversations = data['conversations'] as List<dynamic>? ?? [];
-    debugPrint("[CHAT] conversations=${conversations.length}");
+
     if (conversations.isEmpty) return;
 
     bool stateChanged = false;
@@ -280,13 +292,13 @@ class ChatController extends ChangeNotifier {
 
       // 2. Initialize conversation ONLY if empty
       if (_messages[peerId] == null || _messages[peerId]!.isEmpty) {
-        debugPrint("[CHAT] parsing last message");
+
         final lastMsg = MessageModel.fromJson(lastMsgData);
-        debugPrint("[CHAT] parsed message id=${lastMsg.id}");
+
         
         if (!_serverMsgIdSet(peerId).contains(lastMsg.id)) {
           _messages[peerId] = [lastMsg];
-          debugPrint("[CHAT] inserted peer=$peerId");
+
           _markIdAsSeen(peerId, lastMsg.id!);
           stateChanged = true;
         }
@@ -294,7 +306,7 @@ class ChatController extends ChangeNotifier {
     }
 
     if (stateChanged) {
-      debugPrint("[CHAT] _handleChatListResponse state changed. peers=${_messages.keys.toList()}");
+
       notifyListeners();
     }
   }
@@ -381,9 +393,9 @@ class ChatController extends ChangeNotifier {
   }
 
   void clear() {
-    debugPrint("[CHAT] clear() called. current _messages.length=${_messages.length}");
+
     _messages.clear();
-    debugPrint("[CHAT] clear() finished. current _messages.length=${_messages.length}");
+
     _peerNames.clear();
     _conversationMsgIds.clear();
     _onlineStatus.clear();

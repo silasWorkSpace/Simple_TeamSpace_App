@@ -73,20 +73,20 @@ class TaskController extends ChangeNotifier {
 
   /// Updates the current user context. Clears state on logout or user change.
   void updateCurrentUser(int? userId) {
-    debugPrint("[TASK] updateCurrentUser called with userId=$userId");
+
     if (_currentUserId == userId && _tasks.isNotEmpty) {
-      debugPrint("[TASK] userId is identical and tasks already loaded, skipping fetch.");
+
       return;
     }
 
-    debugPrint("[TASK] User context changed: $_currentUserId -> $userId");
+
     _currentUserId = userId;
     
     // Always clear state when the user session changes or ends
     clear();
 
     if (userId != null) {
-      debugPrint("[TASK] fetching tasks for new user context");
+
       fetchTasks();
     }
   }
@@ -116,7 +116,7 @@ class TaskController extends ChangeNotifier {
   /// Requests the full comment list for [taskId] from the server.
   /// The result is delivered asynchronously via [_handleCommentListResponse].
   void fetchComments(int taskId) {
-    debugPrint('[COMMENT] fetchComments called for task $taskId');
+
     _commentService.fetchComments(taskId);
   }
 
@@ -131,7 +131,7 @@ class TaskController extends ChangeNotifier {
   void sendComment(int taskId, String content) {
     final trimmed = content.trim();
     if (trimmed.isEmpty) return;
-    debugPrint('[COMMENT] sendComment called for task $taskId');
+
     _commentService.sendComment(taskId: taskId, content: trimmed);
   }
 
@@ -139,7 +139,7 @@ class TaskController extends ChangeNotifier {
   /// Phase 5A: Only one status update can be in-flight at a time.
   void updateTaskStatus(int taskId, String newStatus) {
     if (_movingTaskId != null) {
-      debugPrint("[TASK] Rejected updateTaskStatus for $taskId: Task $_movingTaskId is already moving.");
+
       return;
     }
 
@@ -150,7 +150,7 @@ class TaskController extends ChangeNotifier {
     _movingTimeout?.cancel();
     _movingTimeout = Timer(const Duration(seconds: 10), () {
       if (_movingTaskId == taskId) {
-        debugPrint("[TASK] Timeout reached for moving task $taskId. Clearing state.");
+
         _movingTaskId = null;
         _errorMessage = "Update timed out. Please check your connection.";
         notifyListeners();
@@ -217,7 +217,7 @@ class TaskController extends ChangeNotifier {
 
   void _onPacketReceived(Map<String, dynamic> packet) {
     final type = packet['type'] as String;
-    debugPrint("[TASK] _onPacketReceived type=$type");
+
     final data = packet['data'] as Map<String, dynamic>? ?? {};
 
     switch (type) {
@@ -247,7 +247,7 @@ class TaskController extends ChangeNotifier {
     _tasks = rawTasks.map((t) => TaskModel.fromJson(t as Map<String, dynamic>)).toList();
     _sortTasks();
     _isLoading = false;
-    debugPrint("[TASK] Loaded ${_tasks.length} tasks");
+
 
     // Batch resolve user names immediately after receiving the task list
     final Set<int> userIdsToResolve = {};
@@ -267,13 +267,13 @@ class TaskController extends ChangeNotifier {
     
     // Idempotency guard: Prevent duplicate insertion from EVENT + RESP
     if (_tasks.any((t) => t.id == task.id)) {
-      debugPrint("[TASK] Skipping creation of existing task: ${task.id}");
+
       return;
     }
 
     _tasks.add(task);
     _sortTasks();
-    debugPrint("[TASK] Task created: ${task.id}");
+
     
     // Resolve user names if they aren't already known
     _userController.resolveUsers([
@@ -299,7 +299,7 @@ class TaskController extends ChangeNotifier {
     if (index != -1) {
       _tasks[index] = updatedTask;
       _sortTasks();
-      debugPrint("[TASK] Task updated and re-sorted: ${updatedTask.id}");
+
       notifyListeners();
     }
   }
@@ -307,7 +307,7 @@ class TaskController extends ChangeNotifier {
   void _handleTaskDeleteResponse(Map<String, dynamic> data) {
     final taskId = data['task_id'] as int;
     _tasks.removeWhere((t) => t.id == taskId);
-    debugPrint("[TASK] Task deleted: $taskId");
+
     notifyListeners();
   }
 
@@ -321,7 +321,7 @@ class TaskController extends ChangeNotifier {
     _movingTimeout?.cancel();
     _movingTimeout = null;
     _errorMessage = data['message'] as String? ?? "An error occurred";
-    debugPrint("[TASK] Error: $_errorMessage");
+
     notifyListeners();
   }
 
@@ -343,7 +343,7 @@ class TaskController extends ChangeNotifier {
 
   void _onCommentPacket(Map<String, dynamic> packet) {
     final type = packet['type'] as String;
-    debugPrint('[COMMENT] _onCommentPacket type=$type');
+
     final data = packet['data'] as Map<String, dynamic>? ?? {};
 
     switch (type) {
@@ -369,8 +369,8 @@ class TaskController extends ChangeNotifier {
     _taskComments[taskId] = rawComments
         .map((c) => CommentModel.fromJson(c as Map<String, dynamic>))
         .toList();
-    debugPrint(
-        '[COMMENT] Loaded ${_taskComments[taskId]!.length} comments for task $taskId');
+
+
     // Resolve display names for all comment authors in one batch
     final authorIds = _taskComments[taskId]!.map((c) => c.userId).toSet().toList();
     _userController.resolveUsers(authorIds);
@@ -389,7 +389,7 @@ class TaskController extends ChangeNotifier {
   void _handleCommentReceived(Map<String, dynamic> data) {
     final commentJson = data['comment'] as Map<String, dynamic>?;
     if (commentJson == null) {
-      debugPrint('[COMMENT] _handleCommentReceived: missing comment payload');
+
       return;
     }
 
@@ -398,14 +398,14 @@ class TaskController extends ChangeNotifier {
 
     // Idempotency guard: reject duplicates from concurrent RESP + EVENT delivery
     if (list.any((c) => c.id == comment.id)) {
-      debugPrint('[COMMENT] Duplicate comment ${comment.id} dropped');
+
       return;
     }
 
     list.add(comment);
     // Resolve the author's display name if not yet cached
     _userController.resolveUsers([comment.userId]);
-    debugPrint('[COMMENT] Comment ${comment.id} added to task ${comment.taskId}');
+
     notifyListeners();
   }
 

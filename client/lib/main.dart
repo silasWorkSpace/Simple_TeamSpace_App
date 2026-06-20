@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/network/tcp_client.dart';
+import 'package:last_project_client/network/data_socket_client.dart';
 import 'package:last_project_client/services/auth_service.dart';
 import 'package:last_project_client/services/chat_service.dart';
 import 'package:last_project_client/services/comment_service.dart';
 import 'package:last_project_client/services/task_service.dart';
 import 'package:last_project_client/services/activity_service.dart';
 import 'package:last_project_client/services/user_service.dart';
+import 'package:last_project_client/services/file_transfer_service.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
@@ -16,12 +18,17 @@ import 'package:last_project_client/views/home/main_layout.dart';
 
 void main() {
   final tcpClient = TcpClient(host: '127.0.0.1', port: 8888);
+  const dataSocket = DataSocketClient(host: '127.0.0.1');
   final authService = AuthService(tcpClient: tcpClient);
   final chatService = ChatService(tcpClient: tcpClient);
   final commentService = CommentService(tcpClient: tcpClient);
   final activityService = ActivityService(tcpClient: tcpClient);
   final taskService = TaskService(tcpClient: tcpClient);
   final userService = UserService(tcpClient: tcpClient);
+  final fileTransferService = FileTransferService(
+    tcpClient: tcpClient,
+    dataSocket: dataSocket,
+  );
 
   runApp(
     MultiProvider(
@@ -33,6 +40,7 @@ void main() {
         Provider.value(value: activityService),
         Provider.value(value: taskService),
         Provider.value(value: userService),
+        Provider.value(value: fileTransferService),
         ChangeNotifierProvider(
           create: (_) => UserController(
             userService: userService,

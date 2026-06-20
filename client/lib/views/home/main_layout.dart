@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:last_project_client/views/chat/chat_tab.dart';
 import 'package:last_project_client/views/tasks/kanban_tab.dart';
-import 'package:last_project_client/controllers/auth_controller.dart';
+import 'package:last_project_client/views/home/profile_tab.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 
@@ -50,17 +50,15 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   static final List<Widget> _tabs = [
-    const ChatTab(),
     const KanbanTab(),
-    const Center(child: Text("Storage - Future Milestone")),
-    const Center(child: Text("Voice Calls - Future Milestone")),
+    const ChatTab(),
+    const ProfileTab(),
   ];
 
   static const List<String> _titles = [
+    "Tasks",
     "Messages",
-    "Kanban",
-    "Storage",
-    "Voice Calls",
+    "Profile",
   ];
 
   void _onItemTapped(int index) {
@@ -81,12 +79,6 @@ class _MainLayoutState extends State<MainLayout> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
-        actions: [
-          IconButton(
-            onPressed: () => context.read<AuthController>().logout(),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -116,7 +108,7 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ],
       ),
-      floatingActionButton: _selectedIndex == 1
+      floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton(
               onPressed: () => _showCreateTaskDialog(context),
               child: const Icon(Icons.add_task),
@@ -128,24 +120,19 @@ class _MainLayoutState extends State<MainLayout> {
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: "Chat",
-          ),
-          BottomNavigationBarItem(
             icon: Icon(Icons.assignment_outlined),
             activeIcon: Icon(Icons.assignment),
             label: "Tasks",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.folder_open_outlined),
-            activeIcon: Icon(Icons.folder),
-            label: "Files",
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: "Chat",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.call_outlined),
-            activeIcon: Icon(Icons.call),
-            label: "Calls",
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: "Profile",
           ),
         ],
       ),

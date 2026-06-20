@@ -62,17 +62,17 @@ class KanbanTab extends StatelessWidget {
   Widget _buildColumn(BuildContext context, String columnStatus, List<TaskModel> tasks, Color color, TaskController controller) {
     return Expanded(
       child: DragTarget<TaskModel>(
-        onWillAccept: (task) => task != null && task.status != columnStatus && controller.movingTaskId == null,
-        onAccept: (task) => controller.updateTaskStatus(task.id, columnStatus),
+        onWillAcceptWithDetails: (details) => details.data.status != columnStatus && controller.movingTaskId == null,
+        onAcceptWithDetails: (details) => controller.updateTaskStatus(details.data.id, columnStatus),
         builder: (context, candidateData, rejectedData) {
           final isOver = candidateData.isNotEmpty;
           
           return Container(
             decoration: BoxDecoration(
-              color: isOver ? color.withOpacity(0.15) : color.withOpacity(0.05),
+              color: isOver ? color.withValues(alpha: 0.15) : color.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isOver ? color : color.withOpacity(0.2),
+                color: isOver ? color : color.withValues(alpha: 0.2),
                 width: isOver ? 2 : 1,
               ),
             ),
@@ -81,7 +81,7 @@ class KanbanTab extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                   ),
                   child: Row(

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:last_project_client/models/user_model.dart';
 
 class PacketParser {
   /// Version of the protocol.

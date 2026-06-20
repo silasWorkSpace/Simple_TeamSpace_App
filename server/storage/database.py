@@ -35,6 +35,15 @@ def init_db():
         # Index for phone lookup
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone)')
 
+        # Insert system users for channels
+        cursor.execute('''
+            INSERT OR IGNORE INTO users (id, phone, password_hash, display_name) 
+            VALUES 
+              (-1, 'sys_general', 'sys', '#General'),
+              (-2, 'sys_backend', 'sys', 'Backend'),
+              (-3, 'sys_frontend', 'sys', 'Frontend')
+        ''')
+
         # Table: messages (Milestone 3)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
@@ -55,6 +64,13 @@ def init_db():
         cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedup ON messages(sender_id, client_msg_id)')
         # Index for conversation history
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_id, receiver_id)')
+
+        # Migration: Add metadata if missing
+        cursor.execute("PRAGMA table_info(messages)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'metadata' not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN metadata TEXT")
+            print("[DATABASE] Migrated messages table: added metadata column.")
 
         # Table: tasks (Milestone 4 + Phase 6A)
         cursor.execute('''
@@ -115,6 +131,20 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_logs(task_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_task_created ON activity_logs(task_id, created_at)')
 
+        # Table: files (Phase 9)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS files (
+                id TEXT PRIMARY KEY,
+                uploader_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME,
+                FOREIGN KEY(uploader_id) REFERENCES users(id)
+            )
+        ''')
+
         conn.commit()
         print("[DATABASE] Tables and indexes initialized.")
     finally:
@@ -167,7 +197,9 @@ def update_online_status(user_id, is_online):
     finally:
         conn.close()
 
-def create_message(client_msg_id, sender_id, receiver_id, content):
+import json
+
+def create_message(client_msg_id, sender_id, receiver_id, content, msg_type='text', metadata=None):
     """
     Inserts a message if it doesn't exist (dedup).
     Returns (server_msg_id, created_at, is_duplicate).
@@ -185,9 +217,10 @@ def create_message(client_msg_id, sender_id, receiver_id, content):
             return existing['id'], existing['created_at'], True
 
         # 2. Insert new
+        meta_str = json.dumps(metadata) if metadata is not None else None
         cursor.execute(
-            "INSERT INTO messages (client_msg_id, sender_id, receiver_id, content) VALUES (?, ?, ?, ?)",
-            (client_msg_id, sender_id, receiver_id, content)
+            "INSERT INTO messages (client_msg_id, sender_id, receiver_id, content, msg_type, metadata) VALUES (?, ?, ?, ?, ?, ?)",
+            (client_msg_id, sender_id, receiver_id, content, msg_type, meta_str)
         )
         msg_id = cursor.lastrowid
         
@@ -225,11 +258,15 @@ def get_chat_history(user_a, user_b, limit=50, before_id=None):
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        query = """
-            SELECT * FROM messages 
-            WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
-        """
-        params = [user_a, user_b, user_b, user_a]
+        if user_b < 0:
+            query = "SELECT * FROM messages WHERE receiver_id = ?"
+            params = [user_b]
+        else:
+            query = """
+                SELECT * FROM messages 
+                WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+            """
+            params = [user_a, user_b, user_b, user_a]
         
         if before_id:
             query += " AND id < ?"
@@ -240,8 +277,21 @@ def get_chat_history(user_a, user_b, limit=50, before_id=None):
         
         cursor.execute(query, params)
         rows = cursor.fetchall()
-        # Convert to list of dicts for JSON serialization
-        return [dict(row) for row in rows]
+        
+        # Convert to list of dicts for JSON serialization and parse metadata
+        result = []
+        for row in rows:
+            d = dict(row)
+            if d.get('metadata'):
+                try:
+                    import json
+                    d['metadata'] = json.loads(d['metadata'])
+                except:
+                    d['metadata'] = None
+            else:
+                d['metadata'] = None
+            result.append(d)
+        return result
     finally:
         conn.close()
 
@@ -273,7 +323,7 @@ def get_conversation_list(user_id):
             WITH LastMessageIDs AS (
                 SELECT MAX(id) as max_id
                 FROM messages
-                WHERE sender_id = ? OR receiver_id = ?
+                WHERE (sender_id = ? OR receiver_id = ?) AND receiver_id > 0 AND sender_id > 0
                 GROUP BY (CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END)
             )
             SELECT 
@@ -457,3 +507,86 @@ def get_comments_for_task(task_id):
         return [dict(row) for row in rows]
     finally:
         conn.close()
+
+def create_file_record(file_id, uploader_id, filename, size_bytes):
+    """Creates a new pending file record."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO files (id, uploader_id, filename, size_bytes) VALUES (?, ?, ?, ?)",
+            (file_id, uploader_id, filename, size_bytes)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def complete_file_record(file_id):
+    """Marks a file as completed."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE files SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (file_id,)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+def get_file_record(file_id):
+    """Fetches a file record by its ID."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM files WHERE id = ?", (file_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def cleanup_orphaned_files():
+    """
+    Deletes file records stuck in 'pending' status for more than 1 hour.
+    Returns a list of full metadata dicts for each orphan so callers can
+    delete physical files from disk and log human-readable details.
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        # Fetch full metadata for logging/disk cleanup
+        cursor.execute(
+            "SELECT * FROM files WHERE status = 'pending' AND created_at < datetime('now', '-1 hour')"
+        )
+        orphans = [dict(row) for row in cursor.fetchall()]
+
+        if orphans:
+            ids = [o['id'] for o in orphans]
+            placeholders = ','.join(['?'] * len(ids))
+            cursor.execute(f"DELETE FROM files WHERE id IN ({placeholders})", ids)
+            conn.commit()
+
+        return orphans
+    finally:
+        conn.close()
+
+def get_message_by_file_token(token):
+    """
+    Looks up the chat message whose content (file token) matches the given UUID.
+    Returns a dict with sender_id and receiver_id for authorization checks,
+    or None if no associated message is found yet.
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT sender_id, receiver_id FROM messages WHERE content = ? AND msg_type IN ('file', 'image') LIMIT 1",
+            (token,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+

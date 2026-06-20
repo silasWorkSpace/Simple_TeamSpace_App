@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 
 class TaskService {
@@ -9,7 +8,7 @@ class TaskService {
 
   /// Requests all tasks associated with the current user.
   String fetchTasks() {
-    debugPrint("[TASK] fetchTasks called");
+
     final requestId = "task_list_${DateTime.now().millisecondsSinceEpoch}";
     tcpClient.sendPacket(
       "TASK_LIST_REQ",
@@ -31,7 +30,7 @@ class TaskService {
     int? assigneeId,
     String? dueAt,
   }) {
-    debugPrint("[TASK] createTask called: $title");
+
     final requestId = "task_create_${DateTime.now().millisecondsSinceEpoch}";
     tcpClient.sendPacket(
       "TASK_CREATE_REQ",
@@ -52,7 +51,7 @@ class TaskService {
     required int taskId,
     required Map<String, dynamic> updates,
   }) {
-    debugPrint("[TASK] updateTask called for ID $taskId");
+
     final requestId = "task_update_${DateTime.now().millisecondsSinceEpoch}";
     tcpClient.sendPacket(
       "TASK_UPDATE_REQ",
@@ -67,7 +66,7 @@ class TaskService {
 
   /// Deletes a task by ID.
   String deleteTask(int taskId) {
-    debugPrint("[TASK] deleteTask called for ID $taskId");
+
     final requestId = "task_delete_${DateTime.now().millisecondsSinceEpoch}";
     tcpClient.sendPacket(
       "TASK_DELETE_REQ",

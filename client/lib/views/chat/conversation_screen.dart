@@ -1,6 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
+import 'package:last_project_client/services/file_transfer_service.dart';
+import 'package:last_project_client/models/message_model.dart';
 import 'package:last_project_client/views/chat/widgets/message_bubble.dart';
 import 'package:last_project_client/views/chat/widgets/chat_input.dart';
 
@@ -19,10 +23,12 @@ class ConversationScreen extends StatefulWidget {
 }
 
 class _ConversationScreenState extends State<ConversationScreen> {
+  bool _isUploading = false;
+  double _uploadProgress = 0.0;
+
   @override
   void initState() {
     super.initState();
-    // Fetch initial history
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatController>().loadHistory(widget.peerId);
     });
@@ -32,6 +38,43 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final messages = chatController.getMessages(widget.peerId);
     if (messages.isNotEmpty && messages.first.id != null) {
       chatController.loadHistory(widget.peerId, beforeId: messages.first.id);
+    }
+  }
+
+  Future<void> _pickAndUpload() async {
+    final svc = context.read<FileTransferService>();
+    final result = await FilePicker.pickFiles(
+      allowMultiple: false,
+      withData: false, // We stream from path, not memory
+    );
+
+    if (result == null || result.files.isEmpty) return;
+    final picked = result.files.first;
+    if (picked.path == null) return;
+
+    final file = File(picked.path!);
+
+    setState(() {
+      _isUploading = true;
+      _uploadProgress = 0.0;
+    });
+
+    try {
+      await svc.uploadFile(
+        file: file,
+        receiverId: widget.peerId,
+        onProgress: (p) {
+          if (mounted) setState(() => _uploadProgress = p);
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -51,6 +94,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
       ),
       body: Column(
         children: [
+          // Upload progress banner
+          if (_isUploading)
+            LinearProgressIndicator(value: _uploadProgress > 0 ? _uploadProgress : null),
+
           Expanded(
             child: Consumer<ChatController>(
               builder: (context, chatController, child) {
@@ -94,6 +141,26 @@ class _ConversationScreenState extends State<ConversationScreen> {
             onSend: (content) {
               context.read<ChatController>().sendMessage(widget.peerId, content);
             },
+            onSendSticker: (stickerId) {
+              context.read<ChatController>().sendMessage(
+                widget.peerId,
+                '', // empty content for stickers as requested
+                msgType: MessageType.sticker,
+                metadata: MessageMetadata(stickerId: stickerId),
+              );
+            },
+            onSendVoice: (file, durationMs) {
+              context.read<FileTransferService>().uploadFile(
+                file: file,
+                receiverId: widget.peerId,
+                msgType: MessageType.voice,
+                metadata: {
+                  'duration_ms': durationMs,
+                  'codec': 'm4a',
+                },
+              );
+            },
+            onAttach: _pickAndUpload,
           ),
         ],
       ),

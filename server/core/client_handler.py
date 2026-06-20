@@ -7,6 +7,7 @@ from services.task_service import TaskService
 from services.user_service import UserService
 from services.comment_service import CommentService
 from services.activity_service import ActivityService
+from services.file_service import FileService
 from storage import database
 
 class ClientHandler:
@@ -201,6 +202,18 @@ class ClientHandler:
                 self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
                 return
             UserService.handle_get(self, packet)
+
+        elif p_type == "FILE_UPLOAD_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            FileService.handle_upload_request(self, packet)
+
+        elif p_type == "FILE_DOWNLOAD_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            FileService.handle_download_request(self, packet)
 
         else:
             print(f"[WARNING] Unhandled packet type: {p_type}")

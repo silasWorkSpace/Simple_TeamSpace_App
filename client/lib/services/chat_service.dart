@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 
 class ChatService {
@@ -12,6 +11,8 @@ class ChatService {
     required String clientMsgId,
     required int receiverId,
     required String content,
+    String? msgType,
+    Map<String, dynamic>? metadata,
   }) {
     final requestId = "chat_${DateTime.now().millisecondsSinceEpoch}";
     tcpClient.sendPacket(
@@ -20,6 +21,8 @@ class ChatService {
         "client_msg_id": clientMsgId,
         "receiver_id": receiverId,
         "content": content,
+        if (msgType != null) "msg_type": msgType,
+        if (metadata != null) "metadata": metadata,
       },
       id: requestId,
     );
@@ -52,9 +55,9 @@ class ChatService {
 
   /// Requests the list of existing conversations.
   String fetchConversationList() {
-    debugPrint("[CHAT] fetchConversationList called");
+
     final requestId = "list_${DateTime.now().millisecondsSinceEpoch}";
-    debugPrint("[CHAT] before sendPacket CHAT_LIST_REQ");
+
     tcpClient.sendPacket(
       "CHAT_LIST_REQ",
       {},
@@ -68,11 +71,13 @@ class ChatService {
     final type = packet['type'] as String;
     final id = packet['id']?.toString() ?? '';
     
-    // 1. Forward all explicit chat and user presence packets
-    if (type.startsWith('CHAT_') || type.startsWith('USER_')) return true;
+    // 1. Forward all explicit chat, user presence, and file packets
+    if (type.startsWith('CHAT_') || type.startsWith('USER_') || type.startsWith('FILE_')) return true;
     
-    // 2. Forward SYS_ERROR only if they correlate to a chat or history request
-    if (type == 'SYS_ERROR' && (id.startsWith('chat_') || id.startsWith('hist_'))) {
+    // 2. Forward SYS_ERROR only if they correlate to a chat, history, or file request
+    if (type == 'SYS_ERROR' &&
+        (id.startsWith('chat_') || id.startsWith('hist_') ||
+         id.startsWith('file_up_') || id.startsWith('file_dn_'))) {
       return true;
     }
     

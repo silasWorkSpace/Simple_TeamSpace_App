@@ -29,7 +29,7 @@ class TcpClient {
       _socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
       _isConnected = true;
       connectionState.value = TcpConnectionState.connected;
-      debugPrint("[TCP] Connected to $host:$port");
+
 
       _socket!.listen(
         _onData,
@@ -38,7 +38,7 @@ class TcpClient {
         cancelOnError: false,
       );
     } catch (e) {
-      debugPrint("[TCP] Connection failed: $e");
+
       _isConnected = false;
       connectionState.value = TcpConnectionState.disconnected;
       rethrow;
@@ -75,7 +75,7 @@ class TcpClient {
         final packet = jsonDecode(payloadStr);
         _packetController.add(packet);
       } catch (e) {
-        debugPrint("[TCP] JSON Decode Error: $e");
+        // Ignored decode error
       }
 
       // Remove processed packet from buffer
@@ -87,7 +87,7 @@ class TcpClient {
 
   /// Sends a packet with 4-byte length prefix.
   void sendPacket(String type, Map<String, dynamic> data, {String id = "client-req"}) {
-    debugPrint("[TCP] sendPacket type=$type connected=$_isConnected socket=${_socket != null}");
+
     if (_socket == null || !_isConnected) return;
 
     final payload = {
@@ -106,17 +106,17 @@ class TcpClient {
 
     _socket!.add(header);
     _socket!.add(jsonBytes);
-    debugPrint("[TCP] Sent $type");
+
   }
 
   void _onError(error) {
-    debugPrint("[TCP] Socket Error: $error");
+
     _isConnected = false;
     connectionState.value = TcpConnectionState.disconnected;
   }
 
   void _onDone() {
-    debugPrint("[TCP] Socket Closed");
+
     _isConnected = false;
     connectionState.value = TcpConnectionState.disconnected;
     _socket?.destroy();
@@ -128,7 +128,7 @@ class TcpClient {
     _socket = null;
     _isConnected = false;
     connectionState.value = TcpConnectionState.disconnected;
-    debugPrint("[TCP] Disconnected");
+
   }
 
   void dispose() {

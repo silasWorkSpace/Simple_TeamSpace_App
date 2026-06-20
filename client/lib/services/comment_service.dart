@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:last_project_client/network/tcp_client.dart';
 
 /// Networking service for the comment subsystem (Phase 6A).
@@ -22,7 +21,7 @@ class CommentService {
     required int taskId,
     required String content,
   }) {
-    debugPrint('[COMMENT] sendComment taskId=$taskId');
+
     final requestId = 'comment_send_${DateTime.now().millisecondsSinceEpoch}';
     tcpClient.sendPacket(
       'COMMENT_SEND_REQ',
@@ -40,7 +39,7 @@ class CommentService {
   /// Fires: COMMENT_LIST_REQ { task_id }
   /// Expects: COMMENT_LIST_RESP { task_id, comments: [...] }
   String fetchComments(int taskId) {
-    debugPrint('[COMMENT] fetchComments taskId=$taskId');
+
     final requestId = 'comment_list_${DateTime.now().millisecondsSinceEpoch}';
     tcpClient.sendPacket(
       'COMMENT_LIST_REQ',

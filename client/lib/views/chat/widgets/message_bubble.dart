@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:last_project_client/models/message_model.dart';
+import 'package:last_project_client/core/app_constants.dart';
+import 'package:last_project_client/views/chat/widgets/file_bubble.dart';
+import 'package:last_project_client/views/chat/widgets/image_bubble.dart';
+import 'package:last_project_client/views/chat/widgets/sticker_bubble.dart';
+import 'package:last_project_client/views/chat/widgets/voice_bubble.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
@@ -12,9 +17,49 @@ class MessageBubble extends StatelessWidget {
     required this.isMe,
   });
 
-  String _formatTime(DateTime dateTime) {
-    return DateFormat('HH:mm').format(dateTime);
+  @override
+  Widget build(BuildContext context) {
+    // Dispatch to the correct bubble renderer based on msgType.
+    if (message.isSticker) {
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: StickerBubble(message: message),
+      );
+    }
+    
+    if (message.isVoice) {
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: VoiceBubble(message: message, isMe: isMe),
+      );
+    }
+
+    // Images over the inline threshold are treated as downloadable files.
+    if (message.isImage &&
+        (message.metadata.sizeBytes ?? 0) <= AppConstants.maxInlineImageBytes) {
+      return ImageBubble(message: message, isMe: isMe);
+    }
+
+    if (message.isFile || message.isImage) {
+      // isImage lands here only when sizeBytes > maxInlineImageBytes
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: FileBubble(message: message, isMe: isMe),
+      );
+    }
+
+    // Default: plain text bubble (also handles unknown/sticker fallback)
+    return _TextBubble(message: message, isMe: isMe);
   }
+}
+
+class _TextBubble extends StatelessWidget {
+  final MessageModel message;
+  final bool isMe;
+
+  const _TextBubble({required this.message, required this.isMe});
+
+  String _formatTime(DateTime dateTime) => DateFormat('HH:mm').format(dateTime);
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +99,9 @@ class MessageBubble extends StatelessWidget {
                 Text(
                   _formatTime(message.createdAt),
                   style: TextStyle(
-                    color: (isMe ? colorScheme.onPrimary : colorScheme.onSurfaceVariant)
+                    color: (isMe
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurfaceVariant)
                         .withValues(alpha: 0.7),
                     fontSize: 11,
                   ),
