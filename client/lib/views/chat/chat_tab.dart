@@ -9,24 +9,46 @@ import 'package:last_project_client/views/chat/conversation_screen.dart';
 import 'package:last_project_client/views/tasks/user_search_dialog.dart';
 import 'package:last_project_client/core/app_constants.dart';
 
-class ChatTab extends StatelessWidget {
+import 'package:last_project_client/controllers/channel_controller.dart';
+import 'package:last_project_client/models/channel_model.dart';
+
+class ChatTab extends StatefulWidget {
   const ChatTab({super.key});
+
+  @override
+  State<ChatTab> createState() => _ChatTabState();
+}
+
+class _ChatTabState extends State<ChatTab> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChannelController>().fetchChannels();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
 
-    return Scaffold(
-      body: Column(
-        children: [
-          _buildChannelTile(context, AppConstants.channelGeneral, "#General"),
-          _buildChannelTile(context, AppConstants.channelBackend, "#Backend"),
-          _buildChannelTile(context, AppConstants.channelFrontend, "#Frontend"),
-          const Divider(height: 1),
-          Expanded(
-            child: Consumer<ChatController>(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: const PreferredSize(
+          preferredSize: Size.fromHeight(kTextTabBarHeight),
+          child: TabBar(
+            tabs: [
+              Tab(text: "Direct Messages"),
+              Tab(text: "Channels"),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            // DIRECT MESSAGES TAB
+            Consumer<ChatController>(
               builder: (context, chatController, child) {
-                final peerIds = chatController.activePeers.toList();
-
+                final peerIds = chatController.activePeers.where((id) => id > 0).toList();
 
                 if (peerIds.isEmpty) {
                   return const Center(
@@ -35,7 +57,6 @@ class ChatTab extends StatelessWidget {
                 }
 
                 // Sort by last message timestamp (newest first)
-                // Defensive: only sort peers who actually have messages
                 peerIds.sort((a, b) {
                   final messagesA = chatController.getMessages(a);
                   final messagesB = chatController.getMessages(b);
@@ -55,11 +76,9 @@ class ChatTab extends StatelessWidget {
                     final peerId = peerIds[index];
                     final messages = chatController.getMessages(peerId);
                     
-                    // Defensive guard against empty message lists
                     if (messages.isEmpty) return const SizedBox.shrink();
                     
                     final lastMsg = messages.last;
-                    
                     final peerName = chatController.getPeerName(peerId) ?? "User $peerId";
 
                     return ConversationTile(
@@ -83,12 +102,55 @@ class ChatTab extends StatelessWidget {
                 );
               },
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNewChatDialog(context),
-        child: const Icon(Icons.add_comment),
+            
+            // CHANNELS TAB
+            Consumer<ChannelController>(
+              builder: (context, channelController, child) {
+                if (channelController.isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final joinedChannels = channelController.channels.where((c) => c.isJoined).toList();
+                final discoverChannels = channelController.channels.where((c) => !c.isJoined).toList();
+
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.add, color: Colors.blue),
+                      title: const Text("Create Channel", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                      onTap: () => _showCreateChannelDialog(context),
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          if (joinedChannels.isNotEmpty) ...[
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              child: Text("Joined Channels", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                            ),
+                            ...joinedChannels.map((c) => _buildChannelTile(context, c)),
+                          ],
+                          if (discoverChannels.isNotEmpty) ...[
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              child: Text("Discover Channels", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                            ),
+                            ...discoverChannels.map((c) => _buildChannelTile(context, c)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showNewChatDialog(context),
+          child: const Icon(Icons.add_comment),
+        ),
       ),
     );
   }
@@ -130,20 +192,72 @@ class ChatTab extends StatelessWidget {
     }
   }
 
-  Widget _buildChannelTile(BuildContext context, int channelId, String name) {
+  void _showCreateChannelDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    bool isPublic = false;
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text("Create Channel"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: "Channel Name"),
+                  ),
+                  CheckboxListTile(
+                    title: const Text("Public Channel"),
+                    value: isPublic,
+                    onChanged: (val) {
+                      setState(() {
+                        isPublic = val ?? false;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final name = nameController.text.trim();
+                    if (name.isNotEmpty) {
+                      context.read<ChannelController>().createChannel(name, isPublic: isPublic);
+                      Navigator.pop(context);
+                    }
+                  },
+                  child: const Text("Create"),
+                ),
+              ],
+            );
+          }
+        );
+      }
+    );
+  }
+
+  Widget _buildChannelTile(BuildContext context, ChannelModel channel) {
     return ListTile(
-      leading: const CircleAvatar(
+      leading: CircleAvatar(
         backgroundColor: Colors.blueGrey,
-        child: Icon(Icons.tag, color: Colors.white),
+        child: Icon(channel.isPublic ? Icons.tag : Icons.lock, color: Colors.white, size: 20),
       ),
-      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: const Text("Public Channel"),
+      title: Text(channel.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(channel.isPublic ? "Public Channel" : "Private Channel"),
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ConversationScreen(
-              peerId: channelId,
-              peerName: name,
+              peerId: channel.id, // Channel ID is already negative
+              peerName: channel.name,
             ),
           ),
         );

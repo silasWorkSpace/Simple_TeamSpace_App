@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:last_project_client/services/voice_recording_service.dart';
 import 'package:last_project_client/views/chat/widgets/sticker_picker.dart';
 
@@ -25,6 +26,7 @@ class ChatInput extends StatefulWidget {
 
 class _ChatInputState extends State<ChatInput> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   final VoiceRecordingService _voiceService = VoiceRecordingService();
   
   bool _isEmojiShowing = false;
@@ -33,6 +35,22 @@ class _ChatInputState extends State<ChatInput> {
   int _recordingDuration = 0;
   Timer? _recordingTimer;
   static const int _maxRecordingSeconds = 60;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+        if (HardwareKeyboard.instance.isShiftPressed) {
+          return KeyEventResult.ignored; // Allow newline
+        } else {
+          _handleSend();
+          return KeyEventResult.handled; // Send and prevent newline
+        }
+      }
+      return KeyEventResult.ignored;
+    };
+  }
 
   void _handleSend() {
     final text = _controller.text.trim();
@@ -107,6 +125,7 @@ class _ChatInputState extends State<ChatInput> {
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     _recordingTimer?.cancel();
     _voiceService.dispose();
     super.dispose();
@@ -156,6 +175,7 @@ class _ChatInputState extends State<ChatInput> {
                   Expanded(
                     child: TextField(
                       controller: _controller,
+                      focusNode: _focusNode,
                       onTap: () {
                         if (_isEmojiShowing) {
                           setState(() => _isEmojiShowing = false);

@@ -18,7 +18,7 @@ def main():
 
     # 3. Wire upload completion: file_service -> chat_service -> tcp_server routing
     def on_upload_complete(token, uploader_id, uploader_display_name,
-                           receiver_id, filename, size_bytes):
+                           receiver_id, filename, size_bytes, msg_type=None, metadata=None):
         ChatService.handle_file_complete(
             server=tcp_server,
             token=token,
@@ -27,6 +27,8 @@ def main():
             receiver_id=receiver_id,
             filename=filename,
             size_bytes=size_bytes,
+            msg_type=msg_type,
+            metadata=metadata,
         )
 
     FileService.set_completion_callback(on_upload_complete)

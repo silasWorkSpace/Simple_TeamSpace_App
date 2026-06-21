@@ -9,9 +9,12 @@ import 'package:last_project_client/services/task_service.dart';
 import 'package:last_project_client/services/activity_service.dart';
 import 'package:last_project_client/services/user_service.dart';
 import 'package:last_project_client/services/file_transfer_service.dart';
+import 'package:last_project_client/services/channel_service.dart';
 import 'package:last_project_client/controllers/chat_controller.dart';
 import 'package:last_project_client/controllers/task_controller.dart';
 import 'package:last_project_client/controllers/auth_controller.dart';
+import 'package:last_project_client/controllers/user_controller.dart';
+import 'package:last_project_client/controllers/channel_controller.dart';
 import 'package:last_project_client/controllers/user_controller.dart';
 import 'package:last_project_client/views/auth/login_screen.dart';
 import 'package:last_project_client/views/home/main_layout.dart';
@@ -25,6 +28,7 @@ void main() {
   final activityService = ActivityService(tcpClient: tcpClient);
   final taskService = TaskService(tcpClient: tcpClient);
   final userService = UserService(tcpClient: tcpClient);
+  final channelService = ChannelService(tcpClient: tcpClient);
   final fileTransferService = FileTransferService(
     tcpClient: tcpClient,
     dataSocket: dataSocket,
@@ -40,10 +44,16 @@ void main() {
         Provider.value(value: activityService),
         Provider.value(value: taskService),
         Provider.value(value: userService),
+        Provider.value(value: channelService),
         Provider.value(value: fileTransferService),
         ChangeNotifierProvider(
           create: (_) => UserController(
             userService: userService,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ChannelController(
+            channelService: channelService,
           ),
         ),
         ChangeNotifierProvider(

@@ -145,9 +145,12 @@ class FileService:
             sender_id = msg['sender_id']
             receiver_id = msg['receiver_id']
             is_channel = receiver_id < 0
-            # Channel messages are visible to all authenticated users (implicit membership)
-            # DMs are restricted to sender and receiver only
-            if not is_channel and requester_id != sender_id and requester_id != receiver_id:
+            if is_channel:
+                channel_id = abs(receiver_id)
+                if not database.is_channel_member(channel_id, requester_id):
+                    handler.send_packet("SYS_ERROR", {"code": 403, "message": "Access denied"}, p_id)
+                    return
+            elif requester_id != sender_id and requester_id != receiver_id:
                 handler.send_packet("SYS_ERROR", {"code": 403, "message": "Access denied"}, p_id)
                 return
 

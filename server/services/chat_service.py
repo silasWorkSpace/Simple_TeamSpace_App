@@ -52,12 +52,22 @@ class ChatService:
         }
 
         if receiver_id < 0:
-            # Broadcast to all active sessions (channel message)
-            for uid in list(server.active_sessions.keys()):
-                if uid != uploader_id:
+            channel_id = abs(receiver_id)
+            channel = database.get_channel(channel_id)
+            if channel and channel['is_public']:
+                targets = list(server.active_sessions.keys())
+            else:
+                members = database.get_channel_members(channel_id)
+                targets = [m['id'] for m in members]
+
+            # Broadcast to all active sessions in targets (including sender if they are in targets)
+            for uid in targets:
+                if uid in server.active_sessions:
                     server.broadcast_to_user(uid, "CHAT_RECEIVE", payload)
         else:
             server.broadcast_to_user(receiver_id, "CHAT_RECEIVE", payload)
+            if uploader_id != receiver_id:
+                server.broadcast_to_user(uploader_id, "CHAT_RECEIVE", payload)
 
     @staticmethod
     def handle_send(handler, packet):
@@ -81,6 +91,12 @@ class ChatService:
             handler.send_packet("SYS_ERROR", {"code": 400, "message": "Missing chat fields"}, p_id)
             return
 
+        if receiver_id < 0:
+            db_channel_id = abs(receiver_id)
+            if not database.is_channel_member(db_channel_id, handler.user_id):
+                handler.send_packet("SYS_ERROR", {"code": 403, "message": "Only members can send messages"}, p_id)
+                return
+
         # 1. Persist
         server_msg_id, created_at, is_duplicate = database.create_message(
             client_msg_id, sender_id, receiver_id, content, msg_type=msg_type, metadata=metadata
@@ -97,8 +113,16 @@ class ChatService:
 
         # 3. Route to recipient(s) if online
         if receiver_id < 0:
-            for uid in list(handler.server.active_sessions.keys()):
-                if uid != sender_id:
+            channel_id = abs(receiver_id)
+            channel = database.get_channel(channel_id)
+            if channel and channel['is_public']:
+                targets = list(handler.server.active_sessions.keys())
+            else:
+                members = database.get_channel_members(channel_id)
+                targets = [m['id'] for m in members]
+
+            for uid in targets:
+                if uid != sender_id and uid in handler.server.active_sessions:
                     handler.server.broadcast_to_user(uid, "CHAT_RECEIVE", {
                         "server_msg_id": server_msg_id,
                         "sender_id": sender_id,
@@ -166,6 +190,12 @@ class ChatService:
         if not peer_id:
             handler.send_packet("SYS_ERROR", {"code": 400, "message": "Missing peer_id"}, p_id)
             return
+
+        if peer_id < 0:
+            channel_id = abs(peer_id)
+            if not database.is_channel_readable(channel_id, handler.user_id):
+                handler.send_packet("SYS_ERROR", {"code": 403, "message": "Not a member of this channel"}, p_id)
+                return
 
         history = database.get_chat_history(handler.user_id, peer_id, limit, before_id)
         handler.send_packet("CHAT_HIST_RESP", {"messages": history}, p_id)

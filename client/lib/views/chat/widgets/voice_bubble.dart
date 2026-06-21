@@ -88,6 +88,11 @@ class _VoiceBubbleState extends State<VoiceBubble> {
             _localPath = path;
             _isDownloaded = true;
           });
+          try {
+            await _audioPlayer.setSource(DeviceFileSource(path));
+          } catch (e) {
+            debugPrint("VoiceBubble setSource error: $e");
+          }
         }
       }
     }
@@ -100,11 +105,24 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     
     try {
       final fts = context.read<FileTransferService>();
-      await fts.downloadFile(
+      final result = await fts.downloadFile(
         token: widget.message.content,
         filename: widget.message.metadata.filename ?? 'voice_message.m4a',
         sizeBytes: widget.message.metadata.sizeBytes ?? 0,
       );
+      
+      // If downloaded as inline memory bytes, flush to disk so AudioPlayer can use it
+      if (result.bytes != null && result.file == null) {
+        final savePath = await fts.getLocalFilePath(
+          widget.message.content, 
+          widget.message.metadata.filename ?? 'voice_message.m4a'
+        );
+        if (savePath != null) {
+          final file = File(savePath);
+          await file.writeAsBytes(result.bytes!);
+        }
+      }
+      
       await _checkLocalCache();
     } catch (e) {
       if (mounted) {
@@ -122,13 +140,22 @@ class _VoiceBubbleState extends State<VoiceBubble> {
   }
 
   void _togglePlayPause() async {
+    if (!_isDownloaded && !_isDownloading) {
+      await _download();
+      // If download succeeded, it will have set localPath in _checkLocalCache
+      if (_localPath == null) return;
+    }
+
     if (_localPath == null) return;
 
     try {
       if (_isPlaying) {
         await _audioPlayer.pause();
       } else {
-        await _audioPlayer.play(DeviceFileSource(_localPath!));
+        if (_audioPlayer.state == PlayerState.completed) {
+          await _audioPlayer.seek(Duration.zero);
+        }
+        await _audioPlayer.resume();
       }
     } catch (e) {
       if (mounted) {
@@ -231,15 +258,6 @@ class _VoiceBubbleState extends State<VoiceBubble> {
             valueColor: AlwaysStoppedAnimation<Color>(fgColor),
           ),
         ),
-      );
-    }
-
-    if (!_isDownloaded) {
-      return IconButton(
-        icon: const Icon(Icons.download),
-        color: fgColor,
-        onPressed: _download,
-        tooltip: 'Download Voice Message',
       );
     }
 

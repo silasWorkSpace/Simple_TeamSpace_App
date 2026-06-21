@@ -18,8 +18,8 @@ class StickerBubble extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4.0),
       // Constrain sticker dimensions explicitly as requested
-      width: 120,
-      height: 120,
+      width: 85,
+      height: 85,
       child: Image.asset(
         assetPath,
         fit: BoxFit.contain,

@@ -144,6 +144,56 @@ def init_db():
                 FOREIGN KEY(uploader_id) REFERENCES users(id)
             )
         ''')
+        # Table: channels (Phase 10)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS channels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                owner_id INTEGER NOT NULL,
+                is_public BOOLEAN DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Table: channel_members (Phase 10 & 11)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS channel_members (
+                channel_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                role TEXT CHECK( role IN ('owner', 'admin', 'member') ) DEFAULT 'member',
+                joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (channel_id, user_id),
+                FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Migration for role
+        cursor.execute("PRAGMA table_info(channel_members)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'role' not in columns:
+            cursor.execute("ALTER TABLE channel_members ADD COLUMN role TEXT CHECK( role IN ('owner', 'admin', 'member') ) DEFAULT 'member'")
+            print("[DATABASE] Migrated channel_members: added role column.")
+            # Set creators as owners
+            cursor.execute("UPDATE channel_members SET role = 'owner' WHERE user_id IN (SELECT owner_id FROM channels WHERE id = channel_members.channel_id)")
+            # Add all existing users to public channels as members
+            cursor.execute('''
+                INSERT OR IGNORE INTO channel_members (channel_id, user_id, role)
+                SELECT c.id, u.id, 'member'
+                FROM channels c
+                CROSS JOIN users u
+                WHERE c.is_public = 1 AND u.id > 0
+            ''')
+            conn.commit()
+
+        # Seed initial channels if they don't exist
+        cursor.execute('''
+            INSERT OR IGNORE INTO channels (id, name, owner_id, is_public) 
+            VALUES 
+              (1, '#General', 0, 1),
+              (2, '#Backend', 0, 1),
+              (3, '#Frontend', 0, 1)
+        ''')
 
         conn.commit()
         print("[DATABASE] Tables and indexes initialized.")
@@ -590,3 +640,148 @@ def get_message_by_file_token(token):
         conn.close()
 
 
+def create_channel(name, owner_id, is_public=False):
+    """Creates a new channel, adds a dummy user for FK constraints, and adds the owner as a member."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO channels (name, owner_id, is_public) VALUES (?, ?, ?)",
+            (name, owner_id, 1 if is_public else 0)
+        )
+        channel_id = cursor.lastrowid
+        
+        cursor.execute(
+            "INSERT OR IGNORE INTO users (id, phone, password_hash, display_name) VALUES (?, ?, 'sys', ?)",
+            (-channel_id, f'sys_chan_{channel_id}', name)
+        )
+        
+        cursor.execute(
+            "INSERT INTO channel_members (channel_id, user_id, role) VALUES (?, ?, 'owner')",
+            (channel_id, owner_id)
+        )
+        conn.commit()
+        return get_channel(channel_id)
+    finally:
+        conn.close()
+
+def get_channel(channel_id):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM channels WHERE id = ?", (channel_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def rename_channel(channel_id, new_name):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE channels SET name = ? WHERE id = ?", (new_name, channel_id))
+        cursor.execute("UPDATE users SET display_name = ? WHERE id = ?", (new_name, -channel_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+def delete_channel(channel_id):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM channels WHERE id = ?", (channel_id,))
+        cursor.execute("DELETE FROM users WHERE id = ?", (-channel_id,))
+        # SQLite with PRAGMA foreign_keys = ON will handle channel_members deletion via CASCADE
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+def get_channels_for_user(user_id):
+    """Returns all public channels + private channels the user is a member of."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT c.*, 
+                   EXISTS(SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = ?) as is_joined
+            FROM channels c
+            WHERE c.is_public = 1
+               OR EXISTS(SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = ?)
+            ORDER BY c.id ASC
+        ''', (user_id, user_id))
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+def is_channel_readable(channel_id, user_id):
+    """Checks if a user can read history (True for public, or explicit membership)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT is_public FROM channels WHERE id = ?", (channel_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        if row['is_public']:
+            return True
+        cursor.execute("SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ?", (channel_id, user_id))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+def is_channel_member(channel_id, user_id):
+    """Checks strict membership (required to send messages)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ?", (channel_id, user_id))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+def get_channel_role(channel_id, user_id):
+    """Returns the role of a user in a channel ('owner', 'admin', 'member') or None."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT role FROM channel_members WHERE channel_id = ? AND user_id = ?", (channel_id, user_id))
+        row = cursor.fetchone()
+        return row['role'] if row else None
+    finally:
+        conn.close()
+
+def get_channel_members(channel_id):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT u.id, u.display_name, u.is_online, cm.role
+            FROM channel_members cm
+            JOIN users u ON cm.user_id = u.id
+            WHERE cm.channel_id = ?
+        ''', (channel_id,))
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+def add_channel_member(channel_id, user_id):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO channel_members (channel_id, user_id) VALUES (?, ?)", (channel_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+def remove_channel_member(channel_id, user_id):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM channel_members WHERE channel_id = ? AND user_id = ?", (channel_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()

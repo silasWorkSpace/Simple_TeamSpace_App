@@ -69,13 +69,18 @@ class _ImageBubbleState extends State<ImageBubble> {
     Widget content;
 
     if (_bytes != null) {
-      content = ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.memory(
-          _bytes!,
-          fit: BoxFit.cover,
-          width: maxWidth,
-          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 48),
+      content = ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 320,
+          maxHeight: 320,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            _bytes!,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 48),
+          ),
         ),
       );
     } else if (_error != null) {

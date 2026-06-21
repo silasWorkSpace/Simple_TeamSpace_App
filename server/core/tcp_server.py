@@ -70,11 +70,11 @@ class TCPServer:
         try:
             self.server_socket.bind((HOST, TCP_PORT))
             self.server_socket.listen(10)
-            print(f"[SERVER] Đang lắng nghe TCP tại {HOST}:{TCP_PORT}...")
+            print(f"[SERVER] Listening on {HOST}:{TCP_PORT}...")
             
             while True:
                 client_socket, client_address = self.server_socket.accept()
-                print(f"[KẾT NỐI] Client {client_address} đã vào mạng.")
+                print(f"[CONNECTION] Client {client_address} connected.")
                 
                 # Ném kết nối sang ClientHandler xử lý độc lập
                 handler = ClientHandler(client_socket, client_address, self)
@@ -83,6 +83,6 @@ class TCPServer:
                 thread.start()
                 
         except Exception as e:
-            print(f"[LỖI SERVER] {e}")
+            print(f"[SERVER ERROR] {e}")
         finally:
             self.server_socket.close()

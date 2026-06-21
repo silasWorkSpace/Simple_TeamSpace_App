@@ -8,6 +8,7 @@ from services.user_service import UserService
 from services.comment_service import CommentService
 from services.activity_service import ActivityService
 from services.file_service import FileService
+from services.channel_service import ChannelService
 from storage import database
 
 class ClientHandler:
@@ -43,7 +44,7 @@ class ClientHandler:
                 self._handle_packet(packet)
                 
         except Exception as e:
-            print(f"[LỖI HANDLER] {self.address}: {e}")
+            print(f"[HANDLER ERROR] {self.address}: {e}")
         finally:
             self._cleanup()
 
@@ -149,6 +150,72 @@ class ClientHandler:
                 return
             ChatService.handle_list_request(self, packet)
 
+        elif p_type == "CHANNEL_LIST_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_list(self, packet)
+
+        elif p_type == "CHANNEL_CREATE_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_create(self, packet)
+
+        elif p_type == "CHANNEL_RENAME_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_rename(self, packet)
+
+        elif p_type == "CHANNEL_JOIN_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_join(self, packet)
+
+        elif p_type == "CHANNEL_LEAVE_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_leave(self, packet)
+
+        elif p_type == "CHANNEL_KICK_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_kick(self, packet)
+
+        elif p_type == "CHANNEL_ROLE_UPDATE_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_role_update(self, packet)
+
+        elif p_type == "CHANNEL_ADD_MEMBER_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_add_member(self, packet)
+
+        elif p_type == "CHANNEL_REMOVE_MEMBER_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_remove_member(self, packet)
+
+        elif p_type == "CHANNEL_DELETE_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_delete(self, packet)
+
+        elif p_type == "CHANNEL_MEMBERS_REQ":
+            if not self.user_id:
+                self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
+                return
+            ChannelService.handle_members_list(self, packet)
+
         elif p_type == "TASK_CREATE_REQ":
             if not self.user_id:
                 self.send_packet("SYS_ERROR", {"code": 401, "message": "Unauthorized"}, p_id)
@@ -228,4 +295,4 @@ class ClientHandler:
             self.client_socket.close()
         except:
             pass
-        print(f"[KẾT THÚC] Client {self.address} đã ngắt kết nối.")
+        print(f"[END] Client {self.address} disconnected.")

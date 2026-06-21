@@ -196,10 +196,12 @@ class ChatController extends ChangeNotifier {
 
   void _handleChatReceive(Map<String, dynamic> data) {
     final message = MessageModel.fromJson(data);
-    final peerId = message.receiverId < 0 ? message.receiverId : message.senderId;
+    final peerId = message.receiverId < 0 
+        ? message.receiverId 
+        : (message.senderId == _currentUserId ? message.receiverId : message.senderId);
 
     // Metadata Bootstrap
-    if (data.containsKey('sender_display_name') && message.receiverId > 0) {
+    if (data.containsKey('sender_display_name') && message.receiverId > 0 && message.senderId != _currentUserId) {
       _peerNames[peerId] = data['sender_display_name'] as String;
     }
 
@@ -259,9 +261,15 @@ class ChatController extends ChangeNotifier {
     }
 
     if (peerId != null && newMessages.isNotEmpty) {
-      // History is newest-first from server. Reverse to chronological before prepending.
+      // History is newest-first from server.
       final chronological = newMessages.reversed.toList();
-      _messages[peerId] = [...chronological, ...(_messages[peerId] ?? [])];
+      final existing = _messages[peerId] ?? [];
+      
+      final combined = [...chronological, ...existing];
+      // Guarantee chronological order regardless of whether these were old or new messages
+      combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      _messages[peerId] = combined;
       notifyListeners();
     }
   }
